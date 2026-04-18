@@ -1,0 +1,25 @@
+# Dataset — trop lourd pour GitHub (>100 MB)
+Dataset_log/
+
+# Detections generees localement
+detections.json
+scores_history.json
+.opensearch_state.json
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Environnements virtuels
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

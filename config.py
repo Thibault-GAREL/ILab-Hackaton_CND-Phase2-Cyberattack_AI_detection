@@ -1,0 +1,79 @@
+CHALLENGE_ID = "CHALLENGE_NAME_TO_FILL"  # a remplacer quand communique
+
+# =============================================================================
+# API DE SCORING — a remplir le jour J
+# =============================================================================
+SCORING_API_URL     = "https://TO_FILL"
+SCORING_API_KEY     = ""                  # laisser vide si pas de cle
+SCORING_API_HEADERS = {
+    "Content-Type": "application/json",
+    # "X-Api-Key": SCORING_API_KEY,
+    # "Authorization": f"Bearer {SCORING_API_KEY}",
+}
+
+# =============================================================================
+# DATASET LOCAL
+# =============================================================================
+PARQUET_PATH       = "Dataset_log/logs-raw-merged.parquet"
+PARQUET_BATCH_SIZE = 100_000
+
+# Gap en minutes entre deux evenements pour les considerer dans la meme session
+SESSION_GAP_MINUTES = 30
+
+# =============================================================================
+# SENSIBILITE DES DETECTEURS
+# Augmenter un seuil -> moins de detections, moins de faux positifs (-10 pts)
+# Diminuer un seuil  -> plus de detections, risque de faux positifs
+# =============================================================================
+
+# --- Brute force (logs authentication, status=failure) ---
+BRUTE_FORCE_MIN_FAILURES    = 20
+BRUTE_FORCE_EXTERNAL_ONLY   = True   # False pour inclure les IPs RFC-1918 (mouvement lateral)
+BRUTE_FORCE_SPLIT_SESSIONS  = False  # False = 1 detection par IP (recommande, evite le sur-decoupage)
+
+# --- Account Takeover (auth failure(s) suivis d'un succes depuis la meme IP) ---
+ACCOUNT_TAKEOVER_MIN_FAILURES_BEFORE = 5
+ACCOUNT_TAKEOVER_MAX_DELAY_MINUTES   = 60
+ACCOUNT_TAKEOVER_EXTERNAL_ONLY       = False  # True = exclure IPs RFC-1918 (lateral movement ignore)
+
+# --- Credential stuffing (logs application, status_code=401) ---
+CREDENTIAL_STUFFING_MIN_401           = 20
+CREDENTIAL_STUFFING_EXTERNAL_ONLY     = True  # False pour inclure les IPs internes
+CREDENTIAL_STUFFING_SPLIT_SESSIONS    = False  # False = 1 detection par IP
+
+# --- Port scan (logs network) ---
+PORT_SCAN_MIN_PORTS         = 10    # nb ports distincts minimum
+PORT_SCAN_MIN_REJECT_RATIO  = 0.4   # ratio rejet/total (0.0 a 1.0)
+PORT_SCAN_EXTERNAL_ONLY     = True  # ignorer les IPs internes RFC-1918
+
+# --- Network recon (logs network, action=reject, IPs externes) ---
+NETWORK_RECON_MIN_REJECTS = 15
+
+# =============================================================================
+# DEDUPLICATION
+# Quand deux detections de la meme IP se chevauchent dans le temps :
+#   "none"              -> tout soumettre (risque de faux positifs)
+#   "keep_most_specific"-> garder le type le plus precis par fenetre/IP
+#   "merge"             -> fusionner en une seule detection multi-vecteur
+# =============================================================================
+DEDUP_STRATEGY        = "keep_most_specific"
+DEDUP_OVERLAP_MINUTES = 30   # seuil pour considerer deux detections comme chevauchantes
+
+# =============================================================================
+# OPENSEARCH (temps reel — finale)
+# =============================================================================
+OPENSEARCH_HOST             = "https://TO_FILL.eu-west-3.es.amazonaws.com"
+OPENSEARCH_INDEX            = "logs-raw"
+OPENSEARCH_REGION           = "eu-west-3"
+OPENSEARCH_POLL_INTERVAL_S  = 300   # toutes les 5 minutes
+OPENSEARCH_PAGE_SIZE        = 500   # logs par page (scroll)
+OPENSEARCH_STATE_FILE       = ".opensearch_state.json"  # sauvegarde du dernier timestamp
+
+# =============================================================================
+# BEDROCK — analyse LLM (enrichissement des detections)
+# =============================================================================
+BEDROCK_ENABLED      = True
+BEDROCK_MODEL_ID     = "anthropic.claude-opus-4-6-v1"
+BEDROCK_REGION       = "eu-west-3"
+BEDROCK_MAX_TOKENS   = 1024
+BEDROCK_SAMPLE_LOGS  = 10   # nb de logs a inclure dans le prompt pour contexte
