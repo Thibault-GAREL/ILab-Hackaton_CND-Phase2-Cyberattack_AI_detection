@@ -2,6 +2,21 @@ import pandas as pd
 from config import SESSION_GAP_MINUTES
 
 
+def _is_private_ip(ip: str) -> bool:
+    """Retourne True si l'IP appartient aux plages RFC-1918 ou loopback."""
+    return (
+        ip.startswith("10.")
+        or ip.startswith("192.168.")
+        or ip.startswith("172.16.")
+        or ip.startswith("172.17.")
+        or ip.startswith("172.18.")
+        or ip.startswith("172.19.")
+        or ip.startswith("172.2")
+        or ip.startswith("172.3")
+        or ip == "127.0.0.1"
+    )
+
+
 def fmt_ts(ts) -> str:
     """Convertit un timestamp pandas en ISO 8601 UTC."""
     return pd.Timestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")

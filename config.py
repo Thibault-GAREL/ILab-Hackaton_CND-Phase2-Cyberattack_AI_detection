@@ -1,5 +1,3 @@
-CHALLENGE_ID = "CHALLENGE_NAME_TO_FILL"  # a remplacer quand communique
-
 # =============================================================================
 # API DE SCORING — a remplir le jour J
 # =============================================================================
@@ -26,28 +24,10 @@ SESSION_GAP_MINUTES = 30
 # Diminuer un seuil  -> plus de detections, risque de faux positifs
 # =============================================================================
 
-# --- Brute force (logs authentication, status=failure) ---
-BRUTE_FORCE_MIN_FAILURES    = 20
-BRUTE_FORCE_EXTERNAL_ONLY   = True   # False pour inclure les IPs RFC-1918 (mouvement lateral)
-BRUTE_FORCE_SPLIT_SESSIONS  = False  # False = 1 detection par IP (recommande, evite le sur-decoupage)
-
-# --- Account Takeover (auth failure(s) suivis d'un succes depuis la meme IP) ---
-ACCOUNT_TAKEOVER_MIN_FAILURES_BEFORE = 5
-ACCOUNT_TAKEOVER_MAX_DELAY_MINUTES   = 60
-ACCOUNT_TAKEOVER_EXTERNAL_ONLY       = False  # True = exclure IPs RFC-1918 (lateral movement ignore)
-
 # --- Credential stuffing (logs application, status_code=401) ---
 CREDENTIAL_STUFFING_MIN_401           = 20
 CREDENTIAL_STUFFING_EXTERNAL_ONLY     = True  # False pour inclure les IPs internes
 CREDENTIAL_STUFFING_SPLIT_SESSIONS    = False  # False = 1 detection par IP
-
-# --- Port scan (logs network) ---
-PORT_SCAN_MIN_PORTS         = 10    # nb ports distincts minimum
-PORT_SCAN_MIN_REJECT_RATIO  = 0.4   # ratio rejet/total (0.0 a 1.0)
-PORT_SCAN_EXTERNAL_ONLY     = True  # ignorer les IPs internes RFC-1918
-
-# --- Network recon (logs network, action=reject, IPs externes) ---
-NETWORK_RECON_MIN_REJECTS = 15
 
 # =============================================================================
 # DEDUPLICATION

@@ -6,7 +6,7 @@ from config import (
     CAMPAIGN_OVERLAP_MINUTES,
 )
 from .utils import fmt_ts, group_ips_by_overlap
-from .network_recon import _is_private_ip
+from .utils import _is_private_ip
 
 CHALLENGE = "credential_stuffing"
 WEB_SHELL_RE = re.compile(r"/uploads/[^?#\s]*\.php", re.IGNORECASE)

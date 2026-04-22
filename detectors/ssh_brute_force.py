@@ -5,7 +5,7 @@ from config import (
     CAMPAIGN_OVERLAP_MINUTES,
 )
 from .utils import fmt_ts, group_ips_by_overlap
-from .network_recon import _is_private_ip
+from .utils import _is_private_ip
 
 CHALLENGE = "ssh_brute_force"
 EXFIL_PORTS = {443, 8443}

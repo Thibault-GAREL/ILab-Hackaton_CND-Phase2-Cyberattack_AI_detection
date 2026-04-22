@@ -2,7 +2,7 @@ import re
 import pandas as pd
 from config import SSRF_MIN_REQUESTS
 from .utils import fmt_ts
-from .network_recon import _is_private_ip
+from .utils import _is_private_ip
 
 CHALLENGE = "ssrf"
 METADATA_IP = "169.254.169.254"
