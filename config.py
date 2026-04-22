@@ -77,3 +77,25 @@ BEDROCK_MODEL_ID     = "anthropic.claude-opus-4-6-v1"
 BEDROCK_REGION       = "eu-west-3"
 BEDROCK_MAX_TOKENS   = 1024
 BEDROCK_SAMPLE_LOGS  = 10   # nb de logs a inclure dans le prompt pour contexte
+
+# =============================================================================
+# DETECTEURS SPECIFIQUES DS1 — 5 challenges cibles
+# =============================================================================
+
+# --- SSH Brute force (auth_method=ssh, status=failure) ---
+SSH_BRUTE_FORCE_MIN_FAILURES  = 20
+SSH_BRUTE_FORCE_EXTERNAL_ONLY = True
+
+# --- SQL Injection (uri contient des payloads SQL) ---
+SQL_INJECTION_MIN_REQUESTS     = 5
+
+# --- Directory Traversal (uri contient ../) ---
+DIRECTORY_TRAVERSAL_MIN_ATTEMPTS = 3
+
+# --- SSRF (uri contient une IP interne ou 169.254.169.254) ---
+SSRF_MIN_REQUESTS              = 3
+
+# --- Regroupement de campagnes multi-IPs ---
+# Deux IPs dont les fenetres d'attaque se chevauchent a +/- N minutes
+# sont considerees comme faisant partie de la meme campagne.
+CAMPAIGN_OVERLAP_MINUTES       = 90

@@ -25,3 +25,30 @@ def split_sessions(df: pd.DataFrame, time_col: str = "timestamp") -> list[pd.Dat
     for _, group in df.groupby(session_id):
         sessions.append(group.reset_index(drop=True))
     return sessions
+
+
+def group_ips_by_overlap(ip_windows: dict, tolerance_minutes: int) -> list[list]:
+    """
+    Groupe les IPs dont les fenêtres d'attaque se chevauchent en campagnes.
+    ip_windows = {ip: (pd.Timestamp start, pd.Timestamp end)}
+    Retourne une liste de listes d'IPs (une liste = une campagne).
+    """
+    tol = pd.Timedelta(minutes=tolerance_minutes)
+    ips = list(ip_windows.keys())
+    visited: set = set()
+    campaigns = []
+    for ip in ips:
+        if ip in visited:
+            continue
+        group = [ip]
+        visited.add(ip)
+        s1, e1 = ip_windows[ip]
+        for other_ip in ips:
+            if other_ip in visited:
+                continue
+            s2, e2 = ip_windows[other_ip]
+            if s1 <= e2 + tol and s2 <= e1 + tol:
+                group.append(other_ip)
+                visited.add(other_ip)
+        campaigns.append(group)
+    return campaigns

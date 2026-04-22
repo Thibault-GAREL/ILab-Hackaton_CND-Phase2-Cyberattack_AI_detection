@@ -14,11 +14,11 @@ from config import DEDUP_STRATEGY, DEDUP_OVERLAP_MINUTES
 
 # Ordre de specificite : plus l'indice est bas, plus le type est prioritaire
 SPECIFICITY = {
-    "account_takeover":   0,
-    "brute_force":        1,
-    "credential_stuffing": 2,
-    "network_recon":      3,
-    "port_scan":          4,
+    "ssh_brute_force":     0,
+    "credential_stuffing": 1,
+    "sql_injection":       2,
+    "directory_traversal": 3,
+    "ssrf":                4,
 }
 
 

@@ -6,14 +6,16 @@ Hackathon organisé par le CND (EPITA/ESGI/ECE dont je fais partie) — Avril 20
 
 **Objectif** : Construire une pipeline IA qui ingère des logs bruts de cybersécurité, détecte des attaques, les analyse, et soumet les résultats via une API REST au format JSON standardisé. La partie front et backend pour afficher les résultats est déjà faite, mais concentre toi sur l'appel direct à l'API de scoring.
 
-## Architecture attendue de l'application
+## Architecture
 
 ```
-OpenSearch (logs-raw / .parquet télécharger du site)
-    → Détection (règles + IA)
-    → Analyse (type, IPs, timeline, IoC)
-    → Soumission JSON via API REST
-    → Propositions de remédiation (futur avec l'exemple appel Bedrock plus bas où on lui donne le json de soumission)
+Dataset parquet local (ou OpenSearch en temps réel)
+    → load_logs()           ← lit par chunks, sépare auth / app / net / sys
+    → 5 détecteurs ciblés   ← un par challenge DS1
+    → deduplicate()         ← évite les doublons (rare : IPs distinctes)
+    → enrich_detections()   ← enrichissement Bedrock optionnel
+    → detections.json       ← à reviewer avant soumission
+    → submit.py             ← POST vers l'API de scoring
 ```
 
 ## Dataset
@@ -23,7 +25,7 @@ OpenSearch (logs-raw / .parquet télécharger du site)
 - **Taille** : 21 017 848 lignes, 33 colonnes
 - **Attention** : Trop grand pour être chargé en RAM d'un coup — toujours lire par chunks avec `pyarrow.parquet.ParquetFile.iter_batches()`
 
-Dans le futur, il faudra que ce soit un appel API REST (POST).
+Dans le futur, il faudra que ce soit un appel API REST (POST) vers OpenSearch.
 
 ### Schema des logs (33 colonnes)
 
@@ -67,20 +69,63 @@ Dans le futur, il faudra que ce soit un appel API REST (POST).
 - **Fréquence** : toutes les 5 minutes, 50-100 logs par batch
 - **Timeline** : continue après le 31 janvier 2026
 
+## Ground Truth DS1 — 5 challenges cibles
+
+Ces 5 attaques sont les seules présentes dans le dataset DS1. La pipeline doit les détecter toutes et uniquement elles.
+
+| Challenge ID | Type | IPs attaquantes | Victime | Fenêtre | Points max |
+|---|---|---|---|---|---|
+| `credential_stuffing` | Credential stuffing → web shell → reverse shell | 203.0.113.45, 198.51.100.23 | jdupont | 06/01 02h00 → 06h00 | 100 |
+| `ssh_brute_force` | Brute force SSH → lateral movement → priv_esc | 45.33.32.156, 198.51.100.89 | sysadmin | 11/01 01h00 → 07h00 | 100 |
+| `sql_injection` | SQLi → exfiltration ~25 MB | 185.220.101.45 | aucun | 19/01 14h00 → 17h00 | 100 |
+| `directory_traversal` | Path traversal → lecture fichiers sensibles | 198.51.100.200 | aucun | 23/01 10h00 → 12h00 | 80 |
+| `ssrf` | SSRF → accès metadata + services internes | 203.0.113.100 | aucun | 26/01 11h00 → 12h00 | 80 |
+
+### Indicateurs IoC attendus par challenge
+
+**credential_stuffing** — sources : auth + application + network + system
+- `failed_logins` : ~3500 (auth failures + 401 HTTP combinés)
+- `web_shell` : `/uploads/image_2026.php`
+- `reverse_shell_port` : 4444
+- `geolocation` : `Beijing`
+
+**ssh_brute_force** — sources : auth + system + network
+- `total_ssh_failures` : ~4600
+- `lateral_targets` : `app-prod-01`, `app-prod-02`, `db-prod-01`, `web-prod-01`
+- `priv_esc` : `sudo + backdoor user`
+- `exfil_port` : `443/8443`
+
+**sql_injection** — sources : application + network + system
+- `sqli_requests` : ~300
+- `exfil_bytes` : ~25 000 000 octets (~25 MB)
+- `tool_signature` : `Chrome-like UA with automated patterns`
+
+**directory_traversal** — sources : application + network + system
+- `traversal_attempts` : N tentatives
+- `successful_reads` : ~75
+- `traversal_patterns` : `../`
+- `sensitive_files` : `/etc/passwd`, `/etc/shadow`, `/root/.ssh`
+
+**ssrf** — sources : application + network + system
+- `ssrf_targets` : `10.0.3.10:3306`, `10.0.4.10:389`, `169.254.169.254`
+- `internal_traffic_from_web` : `true`
+
 ## Format de soumission
 
 ```json
 {
-  "challenge_id": "NOM_DU_CHALLENGE",
+  "challenge_id": "credential_stuffing",
   "detection": {
-    "attack_type": "type_attaque_detectee",
-    "attacker_ips": ["ip1", "ip2"],
-    "victim_accounts": ["user1"],
+    "attack_type": "credential_stuffing",
+    "attacker_ips": ["203.0.113.45", "198.51.100.23"],
+    "victim_accounts": ["jdupont"],
     "attack_start_time": "2026-01-06T02:00:00Z",
     "attack_end_time": "2026-01-06T06:00:00Z",
     "indicators": {
-      "cle1": "valeur1",
-      "cle2": 42
+      "failed_logins": 3500,
+      "web_shell": "/uploads/image_2026.php",
+      "reverse_shell_port": 4444,
+      "geolocation": "Beijing"
     }
   },
   "detection_time_seconds": 180
@@ -89,7 +134,7 @@ Dans le futur, il faudra que ce soit un appel API REST (POST).
 
 - Timestamps : ISO 8601, timezone UTC
 - `victim_accounts` : liste vide `[]` si aucun compte ciblé
-- Soumission via POST à l'API REST (URL communiquée par les organisateurs)
+- Chaque challenge est soumis séparément avec son propre `challenge_id`
 
 ## Système de scoring
 
@@ -133,45 +178,42 @@ response = client.converse(
 ```python
 import pyarrow.parquet as pq
 pf = pq.ParquetFile('Dataset_log/logs-raw-merged.parquet')
-for batch in pf.iter_batches(batch_size=50000):
+for batch in pf.iter_batches(batch_size=100_000):
     df = batch.to_pandas()
     # traitement...
 ```
 
-## Signaux d'attaques observés dans les données
-
-Observés sur un échantillon de 10 000 logs :
-- **Auth failures massives** : 60% de `status=failure`, dominé par `invalid_password` → brute force probable
-- **Ratio 401 HTTP élevé** : 1311 / 2847 requêtes HTTP retournent 401 → credential stuffing
-- **IP externe suspecte** : `203.0.113.45` génère beaucoup de `reject` réseau
-- **User-agents scripts** : `curl/7.88.1`, `python-requests/2.31.0` en masse
-- **Ports ciblés** : SSH (22), HTTPS (443), MySQL (3306), SMTP (587) — surface d'attaque variée
-
 ---
 
-## Pipeline de detection construite
+## Pipeline de detection
 
 ### Structure du projet
 
 ```text
 ILab_Hackathon-CND-Phase2/
-├── config.py          ← Tous les parametres (CHALLENGE_ID, API, seuils)
-├── pipeline.py        ← Point d'entree : lit le parquet, lance les detecteurs
-├── submit.py          ← Soumet detections.json a l'API de scoring
-├── detections.json    ← Genere par pipeline.py (a reviewer avant soumission)
-├── scores_history.json← Historique des scores par soumission (iterations)
+├── config.py                  ← Tous les parametres (API, seuils, AWS)
+├── pipeline.py                ← Point d'entree : lit le parquet, lance les detecteurs
+├── submit.py                  ← Soumet detections.json a l'API de scoring
+├── bedrock_analysis.py        ← Enrichissement LLM optionnel
+├── realtime_pipeline.py       ← Variante temps reel (OpenSearch)
+├── opensearch_connector.py    ← Connecteur OpenSearch
+├── detections.json            ← Genere par pipeline.py (a reviewer avant soumission)
+├── scores_history.json        ← Historique des scores par soumission
+├── ground-truth-ds1.json      ← Ground truth officiel des 5 challenges DS1
 └── detectors/
-    ├── brute_force.py
-    ├── credential_stuffing.py
-    ├── port_scan.py
-    ├── network_recon.py
-    └── utils.py       ← fmt_ts(), split_sessions()
+    ├── credential_stuffing.py ← Challenge 1 : auth failures + 401 → web shell + reverse shell
+    ├── ssh_brute_force.py     ← Challenge 2 : SSH brute force → lateral + priv_esc
+    ├── sql_injection.py       ← Challenge 3 : SQLi dans les URIs → exfil
+    ├── directory_traversal.py ← Challenge 4 : ../ dans les URIs → fichiers sensibles
+    ├── ssrf.py                ← Challenge 5 : IPs internes dans les URIs → metadata
+    ├── dedup.py               ← Deduplication des detections qui se chevauchent
+    └── utils.py               ← fmt_ts(), split_sessions(), group_ips_by_overlap()
 ```
 
 ### Workflow
 
 ```bash
-# 1. Remplir config.py (CHALLENGE_ID, SCORING_API_URL, SCORING_API_KEY)
+# 1. Remplir config.py (SCORING_API_URL, SCORING_API_KEY, OPENSEARCH_HOST)
 # 2. Lancer la detection sur le dataset complet (~5-10 min)
 python pipeline.py
 
@@ -181,114 +223,87 @@ python submit.py --dry-run
 # 4. Soumettre toutes les detections
 python submit.py
 
-# 5. Soumettre une seule detection (par index)
+# 5. Soumettre une seule detection (par index ou challenge_id)
 python submit.py --index 0
 ```
 
-### Detecteurs heuristiques implementes
+### Detecteurs implementes
 
-| Detecteur | Log source | Signal detecte | Fichier |
+| Detecteur | Sources | Signal principal | Challenge ID |
 | --- | --- | --- | --- |
-| `brute_force` | `authentication` | N echecs auth (status=failure) depuis la meme IP par session | `detectors/brute_force.py` |
-| `credential_stuffing` | `application` | N reponses 401 HTTP depuis la meme IP, souvent avec user-agents scripts | `detectors/credential_stuffing.py` |
-| `port_scan` | `network` | IP externe → N ports distincts avec taux de reject eleve | `detectors/port_scan.py` |
-| `network_recon` | `network` | IP externe → N connexions rejetees en rafale (recon avant attaque) | `detectors/network_recon.py` |
+| `credential_stuffing` | auth + app + net | N 401 HTTP + N echecs auth non-SSH → groupe les IPs en campagne, detecte web shell et reverse shell | `credential_stuffing` |
+| `ssh_brute_force` | auth + sys + net | N echecs auth avec `auth_method=ssh` → groupe les IPs, detecte lateral/priv_esc/exfil | `ssh_brute_force` |
+| `sql_injection` | app | URI contient keywords SQL (`UNION`, `SELECT`, `'`, `--`…) | `sql_injection` |
+| `directory_traversal` | app | URI contient `../` ou variantes encodees | `directory_traversal` |
+| `ssrf` | app + net | URI contient IP interne ou `169.254.169.254` | `ssrf` |
 
-### Attaques confirmees sur echantillon (300k logs)
+> **Note** : `credential_stuffing` et `ssh_brute_force` utilisent `group_ips_by_overlap()` pour fusionner les IPs attaquant dans la même fenêtre temporelle en une seule détection multi-IP. Tolérance : `CAMPAIGN_OVERLAP_MINUTES = 90`.
 
-| Type | IP attaquante | Timeline | Detail |
-| --- | --- | --- | --- |
-| `network_recon` | `203.0.113.45` | 06/01 02h01 → 02h59 | Recon reseau avant l'attaque principale |
-| `brute_force` | `203.0.113.45` | 06/01 03h02 → 04h55 | 800 echecs web (invalid_password) |
-| `brute_force` | `198.51.100.23` | 06/01 03h02 → 04h56 | 346 echecs web |
-| `brute_force` | `198.51.100.89` | 11/01 01h00 → 02h57 | 599 echecs SSH (invalid_key) |
-| `brute_force` | `45.33.32.156` | 11/01 01h00 → 02h57 | SSH |
-| `credential_stuffing` | `203.0.113.45` | 06/01 03h02 → 04h55 | 401 HTTP massifs |
-| `credential_stuffing` | `198.51.100.23` | 06/01 03h02 → 04h56 | 401 HTTP massifs |
+### Calibrage des seuils (config.py)
 
-> Pattern notable : `203.0.113.45` fait d'abord du recon (2h01) puis lance brute force + credential stuffing (3h02) — attaque coordonnee en 2 phases.
-
-### Calibrage de la sensibilite
-
-Tous les seuils sont dans `config.py`. Augmenter = moins de detections = moins de faux positifs.
+Augmenter un seuil → moins de détections → moins de faux positifs (`-10 pts/FP`).
 
 ```python
-BRUTE_FORCE_MIN_FAILURES    = 20    # echecs auth minimum par session/IP
-CREDENTIAL_STUFFING_MIN_401 = 20    # 401 HTTP minimum par session/IP
-PORT_SCAN_MIN_PORTS         = 10    # ports distincts minimum
-PORT_SCAN_MIN_REJECT_RATIO  = 0.4   # ratio rejet/total minimum (0.0 a 1.0)
-PORT_SCAN_EXTERNAL_ONLY     = True  # ignorer les IPs internes RFC-1918
-NETWORK_RECON_MIN_REJECTS   = 15    # connexions rejetees minimum
-SESSION_GAP_MINUTES         = 30    # gap pour separer deux sessions d'attaque
+# Credential stuffing
+CREDENTIAL_STUFFING_MIN_401     = 20   # 401 HTTP + echecs auth non-SSH minimum
+CAMPAIGN_OVERLAP_MINUTES        = 90   # tolerance (min) pour grouper deux IPs en campagne
+
+# SSH brute force
+SSH_BRUTE_FORCE_MIN_FAILURES    = 20   # echecs SSH minimum par IP
+
+# SQL injection
+SQL_INJECTION_MIN_REQUESTS      = 5    # requetes avec payload SQL minimum
+
+# Directory traversal
+DIRECTORY_TRAVERSAL_MIN_ATTEMPTS = 3  # tentatives de traversal minimum
+
+# SSRF
+SSRF_MIN_REQUESTS               = 3   # requetes avec IP interne dans l URI minimum
 ```
 
 ### Configuration API (config.py)
 
 ```python
-CHALLENGE_ID        = "NOM_A_REMPLIR"   # communique par les organisateurs
 SCORING_API_URL     = "https://..."     # URL POST de l'API
 SCORING_API_KEY     = ""                # cle API si requise
 SCORING_API_HEADERS = { ... }           # headers (Content-Type deja configure)
 ```
 
-`submit.py` gere automatiquement l'injection du header `Authorization: Bearer <key>` si `SCORING_API_KEY` est renseigne. Le score de chaque soumission est affiche avec breakdown detaille, et accumule dans `scores_history.json` pour comparer les iterations.
+`submit.py` gere automatiquement l'injection du header `Authorization: Bearer <key>` si `SCORING_API_KEY` est renseigné. Le score de chaque soumission est affiché avec breakdown détaillé et accumulé dans `scores_history.json`.
 
 ---
 
-## Taches a venir
+## Checklist jour J
 
-### 1. Grid search des configurations (tuning automatique)
-
-Ecrire un script `tune_config.py` qui teste toutes les combinaisons de seuils possibles et identifie les configurations qui maximisent le score (minimisent les faux positifs, maximisent la precision de la timeline).
-
-Logique attendue :
-- Definir une grille de valeurs pour chaque parametre sensible (`BRUTE_FORCE_MIN_FAILURES`, `SESSION_GAP_MINUTES`, `DEDUP_STRATEGY`, etc.)
-- Lancer la pipeline de detection pour chaque combinaison
-- Si le ground truth est disponible, calculer le score F1 simule
-- Sinon, utiliser des metriques proxy (nb de detections, ratio IP externes/internes, couverture de la timeline)
-- Sauvegarder le classement des configs dans `tune_results.json`
-
-### 2. README du projet
-
-Generer un README.md complet et synthetique en utilisant le skill `thibault-readme`.
-
-Contenu attendu : architecture, prerequis, commandes pour lancer chaque composant (pipeline, realtime, submit), explication des parametres config, workflow jour J.
-
-### 3. Checklist jour J — ce qu'il faut regler avant de lancer
-
-Liste exhaustive de tout ce qui doit etre configure ou verifie au moment du hackathon :
-
-#### Credentials & acces
+### Credentials & accès
 
 - [ ] Activer le compte SSO AWS (email d'invitation)
 - [ ] Configurer `aws configure sso` (region `eu-west-3`)
-- [ ] Verifier l'acces a la console AWS
+- [ ] Vérifier l'accès à la console AWS
 
-#### config.py — valeurs a remplir
+### config.py — valeurs à remplir
 
-- [ ] `CHALLENGE_ID` — communique par les organisateurs
 - [ ] `SCORING_API_URL` — URL POST de l'API de scoring
-- [ ] `SCORING_API_KEY` — cle API si requise (laisser vide sinon)
+- [ ] `SCORING_API_KEY` — clé API si requise (laisser vide sinon)
 - [ ] `OPENSEARCH_HOST` — URL de l'instance OpenSearch
-- [ ] Adapter `SCORING_API_HEADERS` si le format d'auth differe de `Bearer`
+- [ ] Adapter `SCORING_API_HEADERS` si le format d'auth diffère de `Bearer`
 
-#### Calibrage
+### Calibrage
 
-- [ ] Relancer `pipeline.py --no-bedrock` sur le dataset complet apres avoir vu le ground truth
-- [ ] Ajuster les seuils (`BRUTE_FORCE_MIN_FAILURES`, `DEDUP_STRATEGY`, `*_EXTERNAL_ONLY`) selon les premiers scores obtenus
-- [ ] Verifier que `BEDROCK_ENABLED = True` et que les credentials AWS donnent acces a Bedrock
+- [ ] Lancer `python pipeline.py --no-bedrock` sur le dataset complet
+- [ ] Vérifier dans `detections.json` que les 5 challenges sont détectés (ni plus, ni moins)
+- [ ] Si faux positifs → augmenter les seuils (`*_MIN_*`) dans `config.py`
+- [ ] Si challenge manqué → baisser le seuil correspondant ou inspecter les logs
+- [ ] Vérifier que `BEDROCK_ENABLED = True` et que les credentials AWS donnent accès à Bedrock
 
-#### Pipeline temps reel
+### Pipeline temps réel
 
 - [ ] Tester `realtime_pipeline.py --dry-run` pour valider la connexion OpenSearch
-- [ ] Lancer `realtime_pipeline.py --reset` pour repartir depuis le debut du flux
-- [ ] Verifier que `.opensearch_state.json` est cree et mis a jour
+- [ ] Lancer `realtime_pipeline.py --reset` pour repartir depuis le début du flux
+- [ ] Vérifier que `.opensearch_state.json` est créé et mis à jour
 
-#### Soumission
+### Soumission
 
 - [ ] Faire un `python submit.py --dry-run` pour relire les payloads avant envoi
-- [ ] Soumettre avec `python submit.py` et verifier les scores dans la console
-- [ ] Consulter `scores_history.json` pour comparer les iterations
-
-#### Vérification
-- [ ] Lire l'input et l'output des logs pour voir si notre détection est bonne
+- [ ] Soumettre avec `python submit.py` et vérifier les scores dans la console
+- [ ] Consulter `scores_history.json` pour comparer les itérations et ajuster les seuils

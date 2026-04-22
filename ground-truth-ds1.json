@@ -1,0 +1,215 @@
+{
+  "_index": "ground-truth-ds1",
+  "_id": "credential_stuffing",
+  "_version": 1,
+  "_score": 0,
+  "_source": {
+    "dataset": 1,
+    "challenge_id": "credential_stuffing",
+    "attack_type": "credential_stuffing",
+    "attacker_ips": [
+      "203.0.113.45",
+      "198.51.100.23"
+    ],
+    "victim_accounts": [
+      "jdupont"
+    ],
+    "attack_window": {
+      "start": "2026-01-06T02:00:00.884Z",
+      "end": "2026-01-06T06:00:00.996Z"
+    },
+    "indicators": {
+      "failed_logins": "~3500",
+      "web_shell": "/uploads/image_2026.php",
+      "reverse_shell_port": 4444,
+      "geolocation": "Beijing"
+    },
+    "sources_needed": [
+      "authentication",
+      "application",
+      "network",
+      "system"
+    ],
+    "points_max": 100
+  },
+  "fields": {
+    "attack_window.start": [
+      "2026-01-06T02:00:00.884Z"
+    ],
+    "attack_window.end": [
+      "2026-01-06T06:00:00.996Z"
+    ]
+  }
+}
+
+{
+  "_index": "ground-truth-ds1",
+  "_id": "ssh_brute_force",
+  "_version": 1,
+  "_score": 0,
+  "_source": {
+    "dataset": 1,
+    "challenge_id": "ssh_brute_force",
+    "attack_type": "ssh_brute_force",
+    "attacker_ips": [
+      "45.33.32.156",
+      "198.51.100.89"
+    ],
+    "victim_accounts": [
+      "sysadmin"
+    ],
+    "attack_window": {
+      "start": "2026-01-11T01:00:00.525Z",
+      "end": "2026-01-11T07:00:00.355Z"
+    },
+    "indicators": {
+      "failed_ssh": "~4600",
+      "lateral_targets": [
+        "app-prod-01",
+        "app-prod-02",
+        "db-prod-01",
+        "web-prod-01"
+      ],
+      "priv_esc": "sudo + backdoor user",
+      "exfil_port": "443/8443"
+    },
+    "sources_needed": [
+      "authentication",
+      "system",
+      "network"
+    ],
+    "points_max": 100
+  },
+  "fields": {
+    "attack_window.start": [
+      "2026-01-11T01:00:00.525Z"
+    ],
+    "attack_window.end": [
+      "2026-01-11T07:00:00.355Z"
+    ]
+  }
+}
+
+{
+  "_index": "ground-truth-ds1",
+  "_id": "sql_injection",
+  "_version": 1,
+  "_score": 0,
+  "_source": {
+    "dataset": 1,
+    "challenge_id": "sql_injection",
+    "attack_type": "sql_injection",
+    "attacker_ips": [
+      "185.220.101.45"
+    ],
+    "victim_accounts": [],
+    "attack_window": {
+      "start": "2026-01-19T14:00:00.819Z",
+      "end": "2026-01-19T17:00:00.290Z"
+    },
+    "indicators": {
+      "sqli_payloads": "~300",
+      "exfil_bytes": "~25MB",
+      "tool_signature": "Chrome-like UA with automated patterns"
+    },
+    "sources_needed": [
+      "application",
+      "network",
+      "system"
+    ],
+    "points_max": 100
+  },
+  "fields": {
+    "attack_window.start": [
+      "2026-01-19T14:00:00.819Z"
+    ],
+    "attack_window.end": [
+      "2026-01-19T17:00:00.290Z"
+    ]
+  }
+}
+
+{
+  "_index": "ground-truth-ds1",
+  "_id": "directory_traversal",
+  "_version": 1,
+  "_score": 0,
+  "_source": {
+    "dataset": 1,
+    "challenge_id": "directory_traversal",
+    "attack_type": "directory_traversal",
+    "attacker_ips": [
+      "198.51.100.200"
+    ],
+    "victim_accounts": [],
+    "attack_window": {
+      "start": "2026-01-23T10:00:00.931Z",
+      "end": "2026-01-23T12:00:00.244Z"
+    },
+    "indicators": {
+      "traversal_patterns": "../../../etc/passwd",
+      "successful_reads": "~75",
+      "sensitive_files": [
+        "/etc/passwd",
+        "/etc/shadow",
+        "/root/.ssh/id_rsa"
+      ]
+    },
+    "sources_needed": [
+      "application",
+      "network",
+      "system"
+    ],
+    "points_max": 80
+  },
+  "fields": {
+    "attack_window.start": [
+      "2026-01-23T10:00:00.931Z"
+    ],
+    "attack_window.end": [
+      "2026-01-23T12:00:00.244Z"
+    ]
+  }
+}
+
+{
+  "_index": "ground-truth-ds1",
+  "_id": "ssrf",
+  "_version": 1,
+  "_score": 0,
+  "_source": {
+    "dataset": 1,
+    "challenge_id": "ssrf",
+    "attack_type": "ssrf",
+    "attacker_ips": [
+      "203.0.113.100"
+    ],
+    "victim_accounts": [],
+    "attack_window": {
+      "start": "2026-01-26T11:00:00.298Z",
+      "end": "2026-01-26T12:00:00.344Z"
+    },
+    "indicators": {
+      "ssrf_targets": [
+        "10.0.3.10:3306",
+        "10.0.4.10:389",
+        "169.254.169.254"
+      ],
+      "internal_traffic_from_web": true
+    },
+    "sources_needed": [
+      "application",
+      "network",
+      "system"
+    ],
+    "points_max": 80
+  },
+  "fields": {
+    "attack_window.start": [
+      "2026-01-26T11:00:00.298Z"
+    ],
+    "attack_window.end": [
+      "2026-01-26T12:00:00.344Z"
+    ]
+  }
+}
