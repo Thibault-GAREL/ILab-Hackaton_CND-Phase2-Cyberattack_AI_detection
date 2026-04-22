@@ -5,8 +5,7 @@ from config import (
     CREDENTIAL_STUFFING_EXTERNAL_ONLY,
     CAMPAIGN_OVERLAP_MINUTES,
 )
-from .utils import fmt_ts, group_ips_by_overlap
-from .utils import _is_private_ip
+from .utils import fmt_ts, group_ips_by_overlap, _is_private_ip
 
 CHALLENGE = "credential_stuffing"
 WEB_SHELL_RE = re.compile(r"/uploads/[^?#\s]*\.php", re.IGNORECASE)
@@ -21,21 +20,21 @@ def detect_credential_stuffing(
 ) -> list[dict]:
     """
     Détecte du credential stuffing :
-    mêmes IPs → N requêtes 401 HTTP + N échecs auth web → compte compromis.
-    Enrichi avec : web shell uploadé (/uploads/*.php), reverse shell (port 4444),
-    compte victime, géolocalisation.
+    IPs → N requêtes 401 HTTP → compte compromis.
+    failed_logins = uniquement les 401 HTTP (pas de double comptage avec auth).
+    La fenêtre est élargie avec les échecs auth web pour capturer le début.
     """
     if app_all.empty:
         return []
 
-    # Signal 1 : 401 HTTP depuis les logs application
+    # Signal principal : 401 HTTP depuis les logs application
     app_401 = (
         app_all[app_all["status_code"] == 401]
         if "status_code" in app_all.columns
         else pd.DataFrame(columns=app_all.columns)
     )
 
-    # Signal 2 : échecs auth non-SSH (web, form, api…)
+    # Signal secondaire : échecs auth non-SSH (pour élargir la fenêtre)
     auth_web = pd.DataFrame()
     if auth_failures is not None and not auth_failures.empty:
         auth_web = (
@@ -44,7 +43,6 @@ def detect_credential_stuffing(
             else auth_failures.copy()
         )
 
-    # Pré-groupement par IP pour éviter O(n²)
     app_401_by_ip = (
         {ip: grp for ip, grp in app_401.groupby("source_ip")}
         if not app_401.empty else {}
@@ -53,26 +51,38 @@ def detect_credential_stuffing(
         {ip: grp for ip, grp in auth_web.groupby("source_ip")}
         if not auth_web.empty else {}
     )
-    all_ips = set(app_401_by_ip) | set(auth_web_by_ip)
+    net_by_ip: dict = {}
+    if net_all is not None and not net_all.empty:
+        # Limiter aux IPs qui ont des 401 HTTP
+        net_relevant = net_all[net_all["source_ip"].isin(app_401_by_ip.keys())]
+        if not net_relevant.empty:
+            net_by_ip = {ip: grp for ip, grp in net_relevant.groupby("source_ip")}
 
-    # Fenêtres et comptes par IP
+    # Fenêtres par IP — seuil basé sur les 401 HTTP uniquement
+    # Filtre de densité : exclure le bruit de fond (botnets lents)
+    MIN_401_RATE = 1.0  # tentatives/min minimum
     ip_windows: dict = {}
-    ip_counts: dict = {}
-    for ip in all_ips:
+    ip_401_counts: dict = {}
+    for ip, grp_401 in app_401_by_ip.items():
         if CREDENTIAL_STUFFING_EXTERNAL_ONLY and _is_private_ip(str(ip)):
             continue
-        parts = []
-        if ip in app_401_by_ip:
-            parts.append(app_401_by_ip[ip][["timestamp"]])
+        if len(grp_401) < CREDENTIAL_STUFFING_MIN_401:
+            continue
+        grp_401 = grp_401.sort_values("timestamp")
+        dur = max((grp_401["timestamp"].max() - grp_401["timestamp"].min()).total_seconds() / 60, 1)
+        if len(grp_401) / dur < MIN_401_RATE:
+            continue
+
+        # Fenêtre : min/max entre 401 HTTP, échecs auth web, et réseau
+        ts_parts = [grp_401[["timestamp"]]]
         if ip in auth_web_by_ip:
-            parts.append(auth_web_by_ip[ip][["timestamp"]])
-        if not parts:
-            continue
-        combined = pd.concat(parts, ignore_index=True).sort_values("timestamp")
-        if len(combined) < CREDENTIAL_STUFFING_MIN_401:
-            continue
-        ip_windows[ip] = (combined["timestamp"].min(), combined["timestamp"].max())
-        ip_counts[ip] = len(combined)
+            ts_parts.append(auth_web_by_ip[ip][["timestamp"]])
+        if ip in net_by_ip:
+            ts_parts.append(net_by_ip[ip][["timestamp"]])
+        all_ts = pd.concat(ts_parts, ignore_index=True).sort_values("timestamp")
+
+        ip_windows[ip] = (all_ts["timestamp"].min(), all_ts["timestamp"].max())
+        ip_401_counts[ip] = len(grp_401)
 
     if not ip_windows:
         return []
@@ -81,10 +91,10 @@ def detect_credential_stuffing(
     for campaign_ips in group_ips_by_overlap(ip_windows, CAMPAIGN_OVERLAP_MINUTES):
         t0 = min(ip_windows[ip][0] for ip in campaign_ips)
         t1 = max(ip_windows[ip][1] for ip in campaign_ips)
-        total_failures = sum(ip_counts[ip] for ip in campaign_ips)
+        total_401 = sum(ip_401_counts[ip] for ip in campaign_ips)
         post = pd.Timedelta(hours=2)
 
-        # Victime : premier login réussi non-SSH depuis ces IPs dans la fenêtre
+        # Victime : premier login réussi non-SSH depuis ces IPs
         victim_accounts = []
         if auth_all is not None and not auth_all.empty and "status" in auth_all.columns:
             q = auth_all[
@@ -97,7 +107,7 @@ def detect_credential_stuffing(
                 q = q[q["auth_method"] != "ssh"]
             victim_accounts = sorted(q["username"].dropna().unique().tolist())
 
-        # Web shell : URI /uploads/*.php pendant la fenêtre (+2h)
+        # Web shell
         web_shell = None
         if "uri" in app_all.columns:
             ws = app_all[
@@ -110,7 +120,7 @@ def detect_credential_stuffing(
             if not ws.empty:
                 web_shell = str(ws["uri"].iloc[0])
 
-        # Reverse shell : trafic réseau vers le port 4444
+        # Reverse shell
         reverse_shell_port = None
         if net_all is not None and not net_all.empty and "destination_port" in net_all.columns:
             rs = net_all[
@@ -121,7 +131,7 @@ def detect_credential_stuffing(
             if not rs.empty:
                 reverse_shell_port = REVERSE_SHELL_PORT
 
-        # Géolocalisation : pays dominant dans les logs auth pour ces IPs
+        # Géolocalisation
         geolocation = None
         if (
             auth_failures is not None
@@ -133,7 +143,7 @@ def detect_credential_stuffing(
             if not counts.empty:
                 geolocation = str(counts.index[0])
 
-        indicators: dict = {"failed_logins": total_failures}
+        indicators: dict = {"failed_logins": total_401}
         if web_shell:
             indicators["web_shell"] = web_shell
         if reverse_shell_port:

@@ -4,11 +4,13 @@ from config import (
     SSH_BRUTE_FORCE_EXTERNAL_ONLY,
     CAMPAIGN_OVERLAP_MINUTES,
 )
-from .utils import fmt_ts, group_ips_by_overlap
-from .utils import _is_private_ip
+from .utils import fmt_ts, split_sessions, group_ips_by_overlap, _is_private_ip
 
 CHALLENGE = "ssh_brute_force"
 EXFIL_PORTS = {443, 8443}
+# Minimum de tentatives par minute pour considérer une session comme une attaque
+# (filtre le bruit de fond des botnets lents : ~0.1/min)
+MIN_RATE_PER_MINUTE = 1.0
 
 
 def detect_ssh_brute_force(
@@ -18,9 +20,10 @@ def detect_ssh_brute_force(
     auth_all: pd.DataFrame | None = None,
 ) -> list[dict]:
     """
-    Détecte du brute force SSH :
-    mêmes IPs externes → N échecs auth SSH → accès réussi (sysadmin).
-    Enrichi avec mouvement latéral, escalade de privilèges, exfiltration réseau.
+    Détecte du brute force SSH.
+    Chaque IP est découpée en sessions. Seules les sessions avec un taux
+    de tentatives suffisant sont retenues (filtre le bruit de fond).
+    Les sessions qui se chevauchent sont regroupées en campagnes.
     """
     if auth_failures.empty or "auth_method" not in auth_failures.columns:
         return []
@@ -29,47 +32,47 @@ def detect_ssh_brute_force(
     if ssh_fail.empty:
         return []
 
-    # Fenêtres par IP
-    ip_windows: dict = {}
-    ip_data: dict = {}
+    session_windows: dict = {}
+    session_data: dict = {}
     for ip, grp in ssh_fail.groupby("source_ip"):
         if SSH_BRUTE_FORCE_EXTERNAL_ONLY and _is_private_ip(str(ip)):
             continue
-        if len(grp) < SSH_BRUTE_FORCE_MIN_FAILURES:
-            continue
-        grp = grp.sort_values("timestamp").reset_index(drop=True)
-        ip_windows[ip] = (grp["timestamp"].min(), grp["timestamp"].max())
-        ip_data[ip] = grp
+        for idx, session in enumerate(split_sessions(grp)):
+            if len(session) < SSH_BRUTE_FORCE_MIN_FAILURES:
+                continue
+            t0, t1 = session["timestamp"].min(), session["timestamp"].max()
+            duration_min = max((t1 - t0).total_seconds() / 60, 1)
+            rate = len(session) / duration_min
+            if rate < MIN_RATE_PER_MINUTE:
+                continue
+            key = (str(ip), idx)
+            session_windows[key] = (t0, t1)
+            session_data[key] = session
 
-    if not ip_windows:
+    if not session_windows:
         return []
 
+    campaigns = group_ips_by_overlap(session_windows, CAMPAIGN_OVERLAP_MINUTES)
+
     attacks = []
-    for campaign_ips in group_ips_by_overlap(ip_windows, CAMPAIGN_OVERLAP_MINUTES):
+    for campaign_keys in campaigns:
         merged = pd.concat(
-            [ip_data[ip] for ip in campaign_ips], ignore_index=True
+            [session_data[k] for k in campaign_keys], ignore_index=True
         ).sort_values("timestamp")
         t0, t1 = merged["timestamp"].min(), merged["timestamp"].max()
         post = pd.Timedelta(hours=3)
+        campaign_ips = sorted(set(k[0] for k in campaign_keys))
 
-        # Victime : premier login SSH réussi depuis ces IPs
-        victim_accounts = []
-        if auth_all is not None and not auth_all.empty and "status" in auth_all.columns:
-            q = auth_all[
-                (auth_all["status"] == "success")
-                & (auth_all["source_ip"].isin(campaign_ips))
-            ]
-            if "auth_method" in q.columns:
-                q = q[q["auth_method"] == "ssh"]
-            victim_accounts = sorted(q["username"].dropna().unique().tolist())
+        # Victime : comptes les plus ciblés par les échecs SSH
+        victim_accounts = sorted(merged["username"].dropna().unique().tolist())
 
-        # Cibles latérales : hostnames dans les logs system post-compromis
+        # Cibles latérales
         lateral_targets = []
         if sys_df is not None and not sys_df.empty and "hostname" in sys_df.columns:
             q = sys_df[(sys_df["timestamp"] >= t0) & (sys_df["timestamp"] <= t1 + post)]
             lateral_targets = sorted(q["hostname"].dropna().unique().tolist())
 
-        # Escalade de privilèges : sudo + création d'utilisateur backdoor
+        # Escalade de privilèges
         priv_esc = None
         if sys_df is not None and not sys_df.empty:
             q = sys_df[(sys_df["timestamp"] >= t0) & (sys_df["timestamp"] <= t1 + post)]
@@ -86,7 +89,7 @@ def detect_ssh_brute_force(
             if has_sudo or has_backdoor:
                 priv_esc = "sudo + backdoor user"
 
-        # Exfiltration : connexions sur ports 443/8443
+        # Exfiltration
         exfil_port = None
         if net_df is not None and not net_df.empty and "destination_port" in net_df.columns:
             q = net_df[(net_df["timestamp"] >= t0) & (net_df["timestamp"] <= t1 + post)]
@@ -109,7 +112,7 @@ def detect_ssh_brute_force(
             "challenge_id": CHALLENGE,
             "detection": {
                 "attack_type": "ssh_brute_force",
-                "attacker_ips": sorted(str(ip) for ip in campaign_ips),
+                "attacker_ips": campaign_ips,
                 "victim_accounts": victim_accounts,
                 "attack_start_time": fmt_ts(t0),
                 "attack_end_time": fmt_ts(t1),

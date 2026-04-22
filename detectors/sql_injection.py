@@ -1,25 +1,32 @@
 import re
 import pandas as pd
 from config import SQL_INJECTION_MIN_REQUESTS
-from .utils import fmt_ts
-from .utils import _is_private_ip
+from .utils import fmt_ts, _is_private_ip
 
 CHALLENGE = "sql_injection"
 
 SQL_RE = re.compile(
     r"(?:'|%27|%22|\"|;|%3B|--|%2D%2D|#|%23|/\*|\*/)"
-    r"|(?i:\b(?:UNION|SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|"
-    r"SLEEP|BENCHMARK|WAITFOR|CHAR|ASCII|INFORMATION_SCHEMA|VERSION|DATABASE|USER)\s*[\(\b])",
+    r"|(?:\b(?:UNION|SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|"
+    r"SLEEP|BENCHMARK|WAITFOR|CHAR|ASCII|INFORMATION_SCHEMA|VERSION|DATABASE|USER"
+    r"|CONCAT|EXTRACTVALUE|LOAD_FILE|INTO\s+OUTFILE|INTO\s+DUMPFILE"
+    r"|OR\s+\d+\s*=\s*\d+|AND\s+\d+\s*=\s*\d+)\b)"
+    r"|(?:%55NION|%53ELECT|%4FR\b)"
+    r"|(?:0x[0-9a-fA-F]{4,})",
     re.IGNORECASE,
 )
 
 CHROME_RE = re.compile(r"chrome", re.IGNORECASE)
 
+# Durée max de la phase de reconnaissance avant le premier payload
+RECON_WINDOW = pd.Timedelta(hours=1)
+
 
 def detect_sql_injection(app_all: pd.DataFrame) -> list[dict]:
     """
-    Détecte des attaques SQL injection :
-    même IP externe → N requêtes avec payloads SQL dans l'URI.
+    Détecte des attaques SQL injection.
+    La fenêtre inclut la phase de reconnaissance (requêtes normales
+    depuis la même IP juste avant les payloads SQLi).
     """
     if app_all.empty or "uri" not in app_all.columns:
         return []
@@ -39,16 +46,25 @@ def detect_sql_injection(app_all: pd.DataFrame) -> list[dict]:
             continue
 
         grp = grp.sort_values("timestamp").reset_index(drop=True)
-        t0, t1 = grp["timestamp"].min(), grp["timestamp"].max()
+        sqli_start = grp["timestamp"].min()
+        sqli_end = grp["timestamp"].max()
 
-        # Exfiltration : total octets reçus
+        # Élargir la fenêtre avec la phase de reconnaissance
+        recon_start = sqli_start - RECON_WINDOW
+        recon = app_all[
+            (app_all["source_ip"] == ip)
+            & (app_all["timestamp"] >= recon_start)
+            & (app_all["timestamp"] < sqli_start)
+        ]
+        t0 = recon["timestamp"].min() if not recon.empty else sqli_start
+        t1 = sqli_end
+
         exfil_bytes = None
         if "response_size" in grp.columns:
             total = int(grp["response_size"].dropna().sum())
             if total > 0:
                 exfil_bytes = total
 
-        # Signature outil : Chrome-like avec patterns automatisés
         tool_signature = None
         if "user_agent" in grp.columns:
             if grp["user_agent"].dropna().apply(lambda u: bool(CHROME_RE.search(str(u)))).any():

@@ -11,14 +11,24 @@ TRAVERSAL_RE = re.compile(
     re.IGNORECASE,
 )
 
-SENSITIVE_FILES = ["/etc/passwd", "/etc/shadow", "/root/.ssh", "/proc/", "/var/"]
+SENSITIVE_FILES = [
+    "/etc/passwd",
+    "/etc/shadow",
+    "/root/.ssh/id_rsa",
+    "/root/.ssh/authorized_keys",
+    "/etc/hosts",
+    "/etc/ssh/sshd_config",
+    "/proc/self/environ",
+    "/var/log/auth.log",
+]
 
 
 def _find_sensitive(uris: pd.Series) -> list[str]:
     found = set()
     for uri in uris.dropna():
+        u = str(uri)
         for path in SENSITIVE_FILES:
-            if path in str(uri):
+            if path in u:
                 found.add(path)
     return sorted(found)
 
@@ -56,10 +66,12 @@ def detect_directory_traversal(app_all: pd.DataFrame) -> list[dict]:
         # Fichiers sensibles accédés
         sensitive = _find_sensitive(grp["uri"])
 
-        # Premier pattern de traversal trouvé
+        # Premier pattern de traversal complet trouvé
         traversal_pattern = None
         for uri in grp["uri"].dropna():
-            m = TRAVERSAL_RE.search(str(uri))
+            u = str(uri)
+            # Chercher le pattern complet ../../../etc/passwd etc.
+            m = re.search(r"(?:\.\./|\.\.\\|%2e%2e[%2f/\\])+[^\s?#&]*", u, re.IGNORECASE)
             if m:
                 traversal_pattern = m.group(0)
                 break
