@@ -161,6 +161,13 @@ def main(use_bedrock: bool = True, use_dedup: bool = True):
         json.dump(attacks, f, indent=2, ensure_ascii=False)
     print("Saved to detections.json")
 
+    # Export au format API (consommable par le backend/frontend)
+    from detection_api import to_api_format
+    api_items = [d.model_dump() for d in to_api_format(attacks)]
+    with open("detections_api.json", "w") as f:
+        json.dump(api_items, f, indent=2, ensure_ascii=False)
+    print("Saved to detections_api.json (API format)")
+
     return attacks
 
 

@@ -53,7 +53,7 @@ OPENSEARCH_STATE_FILE       = ".opensearch_state.json"  # sauvegarde du dernier 
 # BEDROCK — analyse LLM (enrichissement des detections)
 # =============================================================================
 BEDROCK_ENABLED      = True
-BEDROCK_MODEL_ID     = "anthropic.claude-opus-4-6-v1"
+BEDROCK_MODEL_ID = "eu.amazon.nova-2-lite-v1:0"  # anthropic.claude-sonnet-4-6
 BEDROCK_REGION       = "eu-west-3"
 BEDROCK_MAX_TOKENS   = 1024
 BEDROCK_SAMPLE_LOGS  = 10   # nb de logs a inclure dans le prompt pour contexte
@@ -67,13 +67,18 @@ SSH_BRUTE_FORCE_MIN_FAILURES  = 20
 SSH_BRUTE_FORCE_EXTERNAL_ONLY = True
 
 # --- SQL Injection (uri contient des payloads SQL) ---
-SQL_INJECTION_MIN_REQUESTS     = 5
+# Vraie attaque = 515 req, 31MB exfil. Scanners = 3-23 req, 0MB exfil.
+# Bedrock reclassifie les scanners en credential_stuffing → confirme que c'est du bruit.
+SQL_INJECTION_MIN_REQUESTS     = 50
+SQL_INJECTION_MIN_EXFIL_BYTES  = 1_000_000  # 1MB — filtre les petits scans
 
 # --- Directory Traversal (uri contient ../) ---
-DIRECTORY_TRAVERSAL_MIN_ATTEMPTS = 3
+# Vraie attaque = 250 req (77 succès). Scanners DirBuster = 10-25 req.
+DIRECTORY_TRAVERSAL_MIN_ATTEMPTS = 100
 
 # --- SSRF (uri contient une IP interne ou 169.254.169.254) ---
-SSRF_MIN_REQUESTS              = 3
+# Vraie attaque = 300 req. Scanners = 10-17 req.
+SSRF_MIN_REQUESTS              = 100
 
 # --- Regroupement de campagnes multi-IPs ---
 # Deux IPs dont les fenetres d'attaque se chevauchent a +/- N minutes

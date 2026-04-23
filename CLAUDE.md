@@ -81,6 +81,8 @@ Ces 5 attaques sont les seules présentes dans le dataset DS1. La pipeline doit 
 | `directory_traversal` | Path traversal → lecture fichiers sensibles | 198.51.100.200 | aucun | 23/01 10h00 → 12h00 | 80 |
 | `ssrf` | SSRF → accès metadata + services internes | 203.0.113.100 | aucun | 26/01 11h00 → 12h00 | 80 |
 
+Attention, dans le `Dataset_log\ground-truth-ds1.json` il y a uniquement 1 erreur pour chaque type possible, mais c'est très probable que dans le dataset global `Dataset_log\logs-raw-merged.parquet`, il y en ai plus bien sûr ! Il faut donc ajuster la sensibilité en fonction de si c'est une attaque ou non de façon intelligente.
+
 ### Indicateurs IoC attendus par challenge
 
 **credential_stuffing** — sources : auth + application + network + system

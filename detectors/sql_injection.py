@@ -1,6 +1,6 @@
 import re
 import pandas as pd
-from config import SQL_INJECTION_MIN_REQUESTS
+from config import SQL_INJECTION_MIN_REQUESTS, SQL_INJECTION_MIN_EXFIL_BYTES
 from .utils import fmt_ts, _is_private_ip
 
 CHALLENGE = "sql_injection"
@@ -64,6 +64,10 @@ def detect_sql_injection(app_all: pd.DataFrame) -> list[dict]:
             total = int(grp["response_size"].dropna().sum())
             if total > 0:
                 exfil_bytes = total
+
+        # Filtrer les petits scans automatiques (peu de requêtes ET peu d'exfil)
+        if (exfil_bytes or 0) < SQL_INJECTION_MIN_EXFIL_BYTES and len(grp) < 200:
+            continue
 
         tool_signature = None
         if "user_agent" in grp.columns:

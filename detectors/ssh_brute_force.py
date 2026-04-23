@@ -59,12 +59,67 @@ def detect_ssh_brute_force(
         merged = pd.concat(
             [session_data[k] for k in campaign_keys], ignore_index=True
         ).sort_values("timestamp")
-        t0, t1 = merged["timestamp"].min(), merged["timestamp"].max()
+        t0, t1_raw = merged["timestamp"].min(), merged["timestamp"].max()
         post = pd.Timedelta(hours=3)
         campaign_ips = sorted(set(k[0] for k in campaign_keys))
 
-        # Victime : comptes les plus ciblés par les échecs SSH
-        victim_accounts = sorted(merged["username"].dropna().unique().tolist())
+        # Étendre t1 avec l'activité post-exploitation (système, réseau)
+        t1 = t1_raw
+        if sys_df is not None and not sys_df.empty:
+            post_sys = sys_df[
+                (sys_df["timestamp"] > t1_raw)
+                & (sys_df["timestamp"] <= t1_raw + post)
+            ]
+            # Chercher des signes de post-exploitation (sudo, useradd, exfil)
+            if not post_sys.empty and "message" in post_sys.columns:
+                suspicious = post_sys[post_sys["message"].str.contains(
+                    r"sudo|useradd|adduser|backdoor|ssh|scp|rsync",
+                    na=False, case=False, regex=True
+                )]
+                if not suspicious.empty:
+                    t1 = max(t1, suspicious["timestamp"].max())
+        if net_df is not None and not net_df.empty:
+            post_net = net_df[
+                (net_df["timestamp"] > t1_raw)
+                & (net_df["timestamp"] <= t1_raw + post)
+                & (net_df["destination_port"].isin(EXFIL_PORTS))
+            ]
+            if not post_net.empty:
+                t1 = max(t1, post_net["timestamp"].max())
+
+        # Victime : compte compromis — chercher dans les logs système (sudo/useradd)
+        victim_accounts = []
+        if sys_df is not None and not sys_df.empty and "message" in sys_df.columns:
+            post_sys = sys_df[
+                (sys_df["timestamp"] >= t0)
+                & (sys_df["timestamp"] <= t1 + post)
+            ]
+            compromised = post_sys[post_sys["message"].str.contains(
+                r"sudo|useradd|adduser|backdoor", na=False, case=False, regex=True
+            )]
+            if not compromised.empty:
+                # D'abord essayer la colonne username
+                if "username" in compromised.columns:
+                    victim_accounts = sorted(compromised["username"].dropna().unique().tolist())
+                # Sinon extraire depuis le message
+                if not victim_accounts:
+                    import re
+                    for msg in compromised["message"].dropna():
+                        m = re.search(r"User\s+(\S+)\s+executed", str(msg))
+                        if m:
+                            victim_accounts.append(m.group(1))
+                    victim_accounts = sorted(set(victim_accounts))
+        # Fallback : login SSH réussi depuis les IPs attaquantes
+        if not victim_accounts and auth_all is not None and not auth_all.empty:
+            success_q = auth_all[
+                (auth_all["status"] == "success")
+                & (auth_all["source_ip"].isin(campaign_ips))
+                & (auth_all["timestamp"] >= t0)
+                & (auth_all["timestamp"] <= t1 + post)
+            ]
+            if "auth_method" in success_q.columns:
+                success_q = success_q[success_q["auth_method"] == "ssh"]
+            victim_accounts = sorted(success_q["username"].dropna().unique().tolist())
 
         # Cibles latérales
         lateral_targets = []

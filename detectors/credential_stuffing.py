@@ -90,9 +90,30 @@ def detect_credential_stuffing(
     attacks = []
     for campaign_ips in group_ips_by_overlap(ip_windows, CAMPAIGN_OVERLAP_MINUTES):
         t0 = min(ip_windows[ip][0] for ip in campaign_ips)
-        t1 = max(ip_windows[ip][1] for ip in campaign_ips)
+        t1_raw = max(ip_windows[ip][1] for ip in campaign_ips)
         total_401 = sum(ip_401_counts[ip] for ip in campaign_ips)
         post = pd.Timedelta(hours=2)
+
+        # Étendre t1 avec l'activité post-exploitation (réseau, app web shells)
+        t1 = t1_raw
+        if net_all is not None and not net_all.empty:
+            post_net = net_all[
+                (net_all["source_ip"].isin(campaign_ips))
+                & (net_all["timestamp"] > t1_raw)
+                & (net_all["timestamp"] <= t1_raw + post)
+            ]
+            if not post_net.empty:
+                t1 = max(t1, post_net["timestamp"].max())
+        # Web shells dans les logs app
+        if "uri" in app_all.columns:
+            post_app = app_all[
+                (app_all["source_ip"].isin(campaign_ips))
+                & (app_all["timestamp"] > t1_raw)
+                & (app_all["timestamp"] <= t1_raw + post)
+                & app_all["uri"].str.contains(WEB_SHELL_RE.pattern, na=False, case=False, regex=True)
+            ]
+            if not post_app.empty:
+                t1 = max(t1, post_app["timestamp"].max())
 
         # Victime : premier login réussi non-SSH depuis ces IPs
         victim_accounts = []

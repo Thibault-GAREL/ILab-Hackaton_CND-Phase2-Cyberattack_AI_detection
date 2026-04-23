@@ -160,4 +160,10 @@ def enrich_detections(detections: list[dict], full_df: pd.DataFrame) -> list[dic
         return detections
 
     print(f"\n[Bedrock] Enrichissement de {len(detections)} detection(s)...")
-    return [enrich_detection(d, full_df) for d in detections]
+    import time
+    results = []
+    for i, d in enumerate(detections):
+        if i > 0:
+            time.sleep(5)
+        results.append(enrich_detection(d, full_df))
+    return results
