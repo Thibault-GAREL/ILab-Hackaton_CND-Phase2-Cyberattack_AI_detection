@@ -2,7 +2,7 @@
   {
     "id": 0,
     "challenge_id": "credential_stuffing",
-    "attack_type": "web_credential_stuffing",
+    "attack_type": "credential_stuffing",
     "attacker_ips": [
       "198.51.100.23",
       "203.0.113.45"
@@ -17,18 +17,7 @@
       "failed_logins": 3594,
       "web_shell": "/uploads/image_2026.php?cmd=ps aux",
       "reverse_shell_port": 4444,
-      "geolocation": "CN",
-      "technique_mitre": "T1110.001",
-      "severity": "critical",
-      "remediation": [
-        "Implement rate limiting on authentication endpoints to mitigate brute-force attacks.",
-        "Enforce strong password policies and multi-factor authentication (MFA) for all user accounts.",
-        "Use CAPTCHA or similar mechanisms to distinguish between human users and automated scripts.",
-        "Monitor and block IP addresses with excessive failed login attempts.",
-        "Regularly review and update account lockout policies to prevent credential stuffing.",
-        "Employ web application firewalls (WAF) to detect and block malicious traffic patterns.",
-        "Conduct regular security awareness training for users to recognize phishing and social engineering attempts."
-      ]
+      "geolocation": "CN"
     }
   },
   {
@@ -62,49 +51,11 @@
         "web-prod-02"
       ],
       "priv_esc": "sudo + backdoor user",
-      "exfil_port": "443/8443",
-      "technique_mitre": "T1110.001",
-      "severity": "critical",
-      "remediation": [
-        "Implement rate limiting on SSH connections",
-        "Disable password-based SSH logins, enforce key-based authentication",
-        "Use fail2ban or similar tools to block repeated failed login attempts",
-        "Restrict SSH access to known good IP ranges via firewall rules",
-        "Monitor and alert on multiple failed SSH login attempts from the same IP",
-        "Enforce strong password policies and multi-factor authentication where possible",
-        "Regularly review and prune valid SSH keys",
-        "Implement network segmentation to limit lateral movement",
-        "Conduct regular vulnerability scanning and penetration testing"
-      ]
+      "exfil_port": "443/8443"
     }
   },
   {
     "id": 2,
-    "challenge_id": "sql_injection",
-    "attack_type": "web_credential_stuffing",
-    "attacker_ips": [
-      "185.220.101.42"
-    ],
-    "victim_accounts": [],
-    "start_time": "2026-01-31T00:07:25Z",
-    "end_time": "2026-01-31T02:42:10Z",
-    "severity": "critical",
-    "indicators": {
-      "sqli_requests": 10,
-      "exfil_bytes": 24794,
-      "technique_mitre": "T1078.004",
-      "severity": "critical",
-      "remediation": [
-        "Implement multi-factor authentication (MFA) for all user accounts.",
-        "Enforce strong password policies and regularly update password hashes using modern hashing algorithms (e.g., bcrypt, Argon2).",
-        "Use rate limiting and IP-based blocking for repeated failed login attempts.",
-        "Monitor and analyze authentication logs for unusual patterns, such as rapid credential guessing or attempts from known malicious IPs.",
-        "Employ web application firewalls (WAF) to detect and block common attack patterns, including credential stuffing attempts."
-      ]
-    }
-  },
-  {
-    "id": 3,
     "challenge_id": "sql_injection",
     "attack_type": "sql_injection",
     "attacker_ips": [
@@ -113,128 +64,15 @@
     "victim_accounts": [],
     "start_time": "2026-01-19T14:00:00Z",
     "end_time": "2026-01-19T16:30:51Z",
-    "severity": "critical",
+    "severity": "high",
     "indicators": {
       "sqli_requests": 515,
       "exfil_bytes": 31240915,
-      "tool_signature": "Chrome-like UA with automated patterns",
-      "technique_mitre": "T1110.001",
-      "severity": "critical",
-      "remediation": [
-        "Implement input validation and parameterized queries to prevent SQL injection attacks.",
-        "Monitor and block IP addresses exhibiting abnormal request patterns or high volumes of requests.",
-        "Use Web Application Firewalls (WAF) to filter and block malicious SQL injection attempts.",
-        "Regularly update and patch applications and databases to address known vulnerabilities.",
-        "Conduct periodic security audits and penetration testing to identify and mitigate potential SQL injection weaknesses."
-      ]
+      "tool_signature": "Chrome-like UA with automated patterns"
     }
   },
   {
-    "id": 4,
-    "challenge_id": "sql_injection",
-    "attack_type": "web_credential_stuffing",
-    "attacker_ips": [
-      "194.26.29.100"
-    ],
-    "victim_accounts": [],
-    "start_time": "2026-01-31T00:07:50Z",
-    "end_time": "2026-04-15T14:35:06Z",
-    "severity": "critical",
-    "indicators": {
-      "sqli_requests": 22,
-      "exfil_bytes": 55904,
-      "technique_mitre": "T1558.001",
-      "severity": "critical",
-      "remediation": [
-        "Implement multi-factor authentication (MFA) for all user accounts.",
-        "Enforce strong password policies and regularly update password hashes using modern algorithms (e.g., bcrypt, Argon2).",
-        "Use rate limiting and IP-based blocking for repeated failed login attempts.",
-        "Employ web application firewalls (WAF) to detect and block common attack patterns, including credential stuffing attempts.",
-        "Regularly review and monitor authentication logs for suspicious activities, especially from geographically unusual locations.",
-        "Implement account lockout policies after a certain number of failed login attempts.",
-        "Conduct regular security awareness training for users to recognize phishing and social engineering attempts."
-      ]
-    }
-  },
-  {
-    "id": 5,
-    "challenge_id": "sql_injection",
-    "attack_type": "ssh_brute_force",
-    "attacker_ips": [
-      "45.155.205.233"
-    ],
-    "victim_accounts": [],
-    "start_time": "2026-01-31T00:07:07Z",
-    "end_time": "2026-01-31T02:38:10Z",
-    "severity": "critical",
-    "indicators": {
-      "sqli_requests": 12,
-      "exfil_bytes": 26696,
-      "technique_mitre": "T1110.001",
-      "severity": "critical",
-      "remediation": [
-        "Implement multi-factor authentication (MFA) for SSH access",
-        "Restrict SSH access to specific IP ranges or use a bastion host",
-        "Use strong password policies and enforce password complexity",
-        "Monitor and block IPs with high rates of failed login attempts",
-        "Consider disabling password-based SSH logins and using key-based authentication instead"
-      ]
-    }
-  },
-  {
-    "id": 6,
-    "challenge_id": "sql_injection",
-    "attack_type": "web_credential_stuffing",
-    "attacker_ips": [
-      "5.188.86.10"
-    ],
-    "victim_accounts": [],
-    "start_time": "2026-01-31T00:08:49Z",
-    "end_time": "2026-04-15T14:34:39Z",
-    "severity": "critical",
-    "indicators": {
-      "sqli_requests": 23,
-      "exfil_bytes": 46773,
-      "technique_mitre": "T1078.004",
-      "severity": "critical",
-      "remediation": [
-        "Implement multi-factor authentication (MFA) for all user accounts.",
-        "Enforce strong password policies and regularly update password hashing mechanisms.",
-        "Use rate limiting and IP-based blocking for repeated failed login attempts.",
-        "Monitor and analyze logs for unusual login patterns, especially from geographically diverse locations.",
-        "Employ web application firewalls (WAF) to detect and block malicious requests.",
-        "Regularly review and update account lockout policies after a certain number of failed attempts."
-      ]
-    }
-  },
-  {
-    "id": 7,
-    "challenge_id": "sql_injection",
-    "attack_type": "web_credential_stuffing",
-    "attacker_ips": [
-      "91.219.236.100"
-    ],
-    "victim_accounts": [],
-    "start_time": "2026-01-31T00:12:21Z",
-    "end_time": "2026-04-15T14:34:26Z",
-    "severity": "critical",
-    "indicators": {
-      "sqli_requests": 18,
-      "exfil_bytes": 47309,
-      "technique_mitre": "T1110.001",
-      "severity": "critical",
-      "remediation": [
-        "Implement multi-factor authentication (MFA) for all user accounts.",
-        "Enforce strong password policies and regular password rotation.",
-        "Use CAPTCHA or rate-limiting to prevent automated credential stuffing attempts.",
-        "Monitor and block IPs with high rates of failed login attempts.",
-        "Employ web application firewalls (WAF) to detect and mitigate common attack patterns.",
-        "Regularly review and update account lockout policies after a certain number of failed attempts."
-      ]
-    }
-  },
-  {
-    "id": 8,
+    "id": 3,
     "challenge_id": "directory_traversal",
     "attack_type": "directory_traversal",
     "attacker_ips": [
@@ -243,7 +81,7 @@
     "victim_accounts": [],
     "start_time": "2026-01-23T10:00:00Z",
     "end_time": "2026-01-23T11:23:00Z",
-    "severity": "critical",
+    "severity": "medium",
     "indicators": {
       "traversal_attempts": 250,
       "successful_reads": 77,
@@ -254,20 +92,11 @@
         "/etc/shadow",
         "/root/.ssh/id_rsa",
         "/var/log/auth.log"
-      ],
-      "technique_mitre": "T1110.001",
-      "severity": "critical",
-      "remediation": [
-        "Implement proper input validation and sanitization for file paths in the API to prevent directory traversal.",
-        "Use allowlisting for accessible directories rather than denylisting potentially dangerous paths.",
-        "Apply the principle of least privilege to API users and ensure they cannot access sensitive system files.",
-        "Monitor and log all file access attempts, especially those involving directory traversal patterns.",
-        "Conduct regular security audits and penetration testing focusing on directory traversal vulnerabilities."
       ]
     }
   },
   {
-    "id": 9,
+    "id": 4,
     "challenge_id": "ssrf",
     "attack_type": "ssrf",
     "attacker_ips": [
@@ -276,7 +105,7 @@
     "victim_accounts": [],
     "start_time": "2026-01-26T11:00:00Z",
     "end_time": "2026-01-26T12:13:30Z",
-    "severity": "critical",
+    "severity": "high",
     "indicators": {
       "ssrf_requests": 300,
       "ssrf_targets": [
@@ -301,16 +130,7 @@
         "10.0.9.10:3306",
         "169.254.169.254"
       ],
-      "internal_traffic_from_web": true,
-      "technique_mitre": "T1552.004",
-      "severity": "critical",
-      "remediation": [
-        "Implement input validation and sanitization for URL parameters to prevent SSRF attacks.",
-        "Use allowlisting for external URLs and block access to internal IP ranges and cloud metadata endpoints.",
-        "Deploy Web Application Firewalls (WAF) with SSRF-specific rules to filter out malicious requests.",
-        "Regularly audit and monitor API endpoints for unusual request patterns and internal service probing.",
-        "Educate developers on secure coding practices to avoid SSRF vulnerabilities in web applications."
-      ]
+      "internal_traffic_from_web": true
     }
   }
 ]
