@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: CND Phase2 — EventBridge 5 min -> Lambda (OpenSearch + Bedrock + scoring)
+
+Globals:
+  Function:
+    Timeout: 900
+    MemorySize: 3008
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+
+Parameters:
+  OpenSearchHost:
+    Type: String
+    Description: URL OpenSearch (https://search-...amazonaws.com)
+  OpenSearchUser:
+    Type: String
+    Default: etudiant
+  OpenSearchPassword:
+    Type: String
+    NoEcho: true
+  ScoringApiUrl:
+    Type: String
+    Description: URL POST API de scoring
+  ScoringApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+  SubmitDryRun:
+    Type: String
+    Default: "0"
+    AllowedValues:
+      - "0"
+      - "1"
+    Description: 1 = submit.py en dry-run (pas de POST réel)
+
+Resources:
+  CursorTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  PollFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: python3.12
+      BuildProperties:
+        Manifest: sam/requirements.txt
+    Properties:
+      CodeUri: ../
+      Handler: sam.handler.lambda_handler
+      Environment:
+        Variables:
+          OPENSEARCH_STATE_BACKEND: dynamodb
+          OPENSEARCH_STATE_DYNAMODB_TABLE: !Ref CursorTable
+          OPENSEARCH_STATE_DYNAMODB_PK: PIPELINE_CURSOR
+          OPENSEARCH_HOST: !Ref OpenSearchHost
+          OPENSEARCH_AUTH: basic
+          OPENSEARCH_BASIC_USER: !Ref OpenSearchUser
+          OPENSEARCH_BASIC_PASSWORD: !Ref OpenSearchPassword
+          OPENSEARCH_REGION: eu-west-3
+          BEDROCK_REGION: eu-west-3
+          SCORING_API_URL: !Ref ScoringApiUrl
+          SCORING_API_KEY: !Ref ScoringApiKey
+          SUBMIT_DRY_RUN: !Ref SubmitDryRun
+          SUBMIT_CACHE_FILE: /tmp/.submit_fingerprint_cache.json
+          BEDROCK_ENABLED: "1"
+          CND_DS1_CANONICAL_TIMELINE: "0"
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CursorTable
+        - Statement:
+            - Sid: BedrockRuntime
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:Converse
+              Resource: "*"
+      Events:
+        PollSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Enabled: true
+
+Outputs:
+  PollFunctionArn:
+    Value: !GetAtt PollFunction.Arn
+  CursorTableName:
+    Value: !Ref CursorTable

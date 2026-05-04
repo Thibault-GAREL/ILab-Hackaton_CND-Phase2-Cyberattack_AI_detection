@@ -77,7 +77,6 @@ def detect_directory_traversal(app_all: pd.DataFrame) -> list[dict]:
                 break
 
         indicators: dict = {
-            "traversal_attempts": len(grp),
             "successful_reads": successful_reads,
         }
         if traversal_pattern:

@@ -16,7 +16,7 @@
 
 ## 📝 Project Description
 
-This project is an **AI-powered cybersecurity detection pipeline** built for the CND Hackathon (EPITA / ESGI / ECE — April 2026). It ingests raw security logs (network, authentication, application, system), detects cyberattacks using **heuristic rules**, enriches each detection with **Claude Opus 4.6 via Amazon Bedrock**, and submits results to a scoring REST API in standardized JSON format. The pipeline handles both a static dataset (21M logs in Parquet) and a real-time OpenSearch stream for the final day.
+This project is an **AI-powered cybersecurity detection pipeline** built for the CND Hackathon (EPITA / ESGI / ECE — April 2026). It pulls **incremental batches from Amazon OpenSearch** (`logs-raw`), detects cyberattacks using **heuristic rules**, enriches each detection with **Claude Opus 4.6 via Amazon Bedrock**, and can write `detections.json` and/or **POST** to the scoring REST API. Optional Parquet tooling remains for local benchmarks only (`scripts/benchmark_and_report.py`).
 
 ---
 
@@ -46,7 +46,7 @@ This project is an **AI-powered cybersecurity detection pipeline** built for the
 
 ## ⚙️ How it works
 
-  📂 **Load** — reads the Parquet dataset in chunks of 100k rows to avoid OOM (21M rows, 411 MB)
+  📡 **Fetch** — `pipeline.py` queries OpenSearch with `search_after` and a persisted cursor (file or DynamoDB)
 
   🔎 **Detect** — each detector runs on its filtered log subset (auth failures, HTTP 401s, network events)
 
@@ -54,16 +54,18 @@ This project is an **AI-powered cybersecurity detection pipeline** built for the
 
   🤖 **Enrich** — Claude Opus 4.6 refines the attack type and adds IoC indicators for each detection
 
-  📤 **Submit** — each detection is POSTed to the scoring API; scores are logged in `scores_history.json`
+  ⏱️ **Latency field** — `detection_time_seconds` is derived from the earliest attacker-related log timestamp in the batch (speed bonus under 300 seconds)
 
-  🔁 **Real-time** — `realtime_pipeline.py` polls OpenSearch, processes new batches, and auto-submits
+  📤 **Submit** — use `pipeline.py --submit`, `submit.py`, or the SAM Lambda (`sam/`)
+
+  🔁 **Loop** — `python pipeline.py --loop` or `realtime_pipeline.py` (alias) for continuous polling
 
 ---
 
 ## 🗺️ Schema
 
 ```text
-OpenSearch (logs-raw) / Parquet (local)
+OpenSearch (logs-raw)
          ↓
    [ pipeline.py ]
          ↓
@@ -165,14 +167,18 @@ source .venv/bin/activate   # Linux / macOS
 pip install pyarrow pandas boto3 requests
 ```
 
-> ⚠️ The dataset (`Dataset_log/logs-raw-merged.parquet`, 411 MB) is **not included** in the repo — place it manually in the `Dataset_log/` folder.
+> Optional: a large Parquet mirror is **not** required for `pipeline.py` (OpenSearch-only). For local perf benchmarks, place a Parquet export under `Dataset_log/` or `data/` if needed.
 
-### Run the detection pipeline (local dataset)
+### Run the detection pipeline (OpenSearch)
 
 ```bash
-python pipeline.py              # full run with Bedrock enrichment
-python pipeline.py --no-bedrock # skip LLM (no AWS credentials needed)
-python pipeline.py --no-dedup   # skip deduplication
+python pipeline.py                      # one poll → detections.json + cursor advance
+python pipeline.py --max-docs 5000     # cap batch size
+python pipeline.py --loop              # continuous polling (interval from config)
+python pipeline.py --submit            # submit each detection immediately
+python pipeline.py --submit-dry-run    # scoring API dry-run
+python pipeline.py --reset-state      # reset OpenSearch cursor
+python pipeline.py --no-dedup
 ```
 
 ### Review and submit detections
@@ -183,13 +189,18 @@ python submit.py                # submit all detections in detections.json
 python submit.py --index 0      # submit only detection #0
 ```
 
-### Run the real-time pipeline (OpenSearch stream — finale)
+### Real-time loop (alias)
 
 ```bash
-python realtime_pipeline.py             # start polling every 5 min
-python realtime_pipeline.py --dry-run   # detect without submitting
-python realtime_pipeline.py --reset     # restart from beginning of stream
+python pipeline.py --loop --submit       # recommended
+python realtime_pipeline.py             # same loop (wrapper)
+python realtime_pipeline.py --dry-run   # soumission API en dry-run ; curseur non avancé
+python realtime_pipeline.py --reset     # reset cursor then loop
 ```
+
+### AWS Lambda (EventBridge every 5 minutes)
+
+See [`sam/README.md`](sam/README.md) and `sam/template.yaml` — packages the repo root, DynamoDB cursor, Bedrock + OpenSearch env vars.
 
 ### Configure before running
 

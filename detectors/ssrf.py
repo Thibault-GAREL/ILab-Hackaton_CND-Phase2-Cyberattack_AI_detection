@@ -93,7 +93,7 @@ def detect_ssrf(
 
         all_targets = sorted(set(targets_from_uri + internal_targets))
 
-        indicators: dict = {"ssrf_requests": len(grp)}
+        indicators: dict = {}
         if all_targets:
             indicators["ssrf_targets"] = all_targets
         if internal_traffic:

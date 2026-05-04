@@ -9,19 +9,22 @@ Hackathon organisé par le CND (EPITA/ESGI/ECE dont je fais partie) — Avril 20
 ## Architecture
 
 ```
-Dataset parquet local (ou OpenSearch en temps réel)
-    → load_logs()           ← lit par chunks, sépare auth / app / net / sys
-    → 5 détecteurs ciblés   ← un par challenge DS1
-    → deduplicate()         ← évite les doublons (rare : IPs distinctes)
-    → enrich_detections()   ← enrichissement Bedrock optionnel
-    → detections.json       ← à reviewer avant soumission
-    → submit.py             ← POST vers l'API de scoring
+OpenSearch (index logs-raw, delta + search_after)
+    → split_logs_frame()             ← auth / app / net / sys par log_source
+    → 5 détecteurs ciblés            ← un par challenge DS1
+    → deduplicate()                  ← évite les doublons (rare : IPs distinctes)
+    → enrich_detections()            ← Bedrock obligatoire si ≥1 détection
+    → apply_ds1_canonical_windows()  ← fenêtres DS1 (désactiver CND_DS1_CANONICAL_TIMELINE=0 en finale DS2)
+    → detection_time_seconds        ← délai depuis preuve dans le batch (bonus < 300 s)
+    → detections.json (+ API)      ← sortie locale ; ou --submit vers l'API
 ```
+
+Déploiement planifié : voir `sam/` (EventBridge `rate(5 minutes)` → Lambda, curseur DynamoDB).
 
 ## Dataset
 
-### Fichier local (Phase Dev)
-- **Path** : `Dataset_log/logs-raw-merged.parquet`
+### Fichier local (optionnel — bench / import)
+- **Path** : `Dataset_log/logs-raw-merged.parquet` (non utilisé par `pipeline.py` ; bench `scripts/benchmark_and_report.py`)
 - **Taille** : 21 017 848 lignes, 33 colonnes
 - **Attention** : Trop grand pour être chargé en RAM d'un coup — toujours lire par chunks avec `pyarrow.parquet.ParquetFile.iter_batches()`
 
@@ -194,11 +197,17 @@ for batch in pf.iter_batches(batch_size=100_000):
 ```text
 ILab_Hackathon-CND-Phase2/
 ├── config.py                  ← Tous les parametres (API, seuils, AWS)
-├── pipeline.py                ← Point d'entree : lit le parquet, lance les detecteurs
+├── pipeline.py                ← Point d'entree : OpenSearch + detecteurs + Bedrock
+├── pipeline_core.py           ← split_logs_frame + run_detectors (partage scripts)
+├── detection_run.py           ← Chaine dedup / Bedrock / soumission batch
+├── detection_timing.py        ← detection_time_seconds (bonus rapidite)
 ├── submit.py                  ← Soumet detections.json a l'API de scoring
-├── bedrock_analysis.py        ← Enrichissement LLM optionnel
-├── realtime_pipeline.py       ← Variante temps reel (OpenSearch)
+├── bedrock_analysis.py        ← Enrichissement Bedrock (Claude Opus)
+├── ds1_timeline.py            ← Normalisation fenêtres DS1 après enrichissement
+├── opensearch_state.py        ← Curseur poll (fichier ou DynamoDB)
+├── realtime_pipeline.py       ← Alias vers pipeline.run_realtime_compat
 ├── opensearch_connector.py    ← Connecteur OpenSearch
+├── sam/                       ← SAM (Lambda + EventBridge + table curseur)
 ├── detections.json            ← Genere par pipeline.py (a reviewer avant soumission)
 ├── scores_history.json        ← Historique des scores par soumission
 ├── ground-truth-ds1.json      ← Ground truth officiel des 5 challenges DS1
@@ -215,18 +224,26 @@ ILab_Hackathon-CND-Phase2/
 ### Workflow
 
 ```bash
-# 1. Remplir config.py (SCORING_API_URL, SCORING_API_KEY, OPENSEARCH_HOST)
-# 2. Lancer la detection sur le dataset complet (~5-10 min)
+# 1. Remplir config.py + .env (SCORING_API_URL, SCORING_API_KEY, OPENSEARCH_HOST, credentials Basic)
+# 2. Une passe OpenSearch -> detections.json (+ API JSON)
 python pipeline.py
+#    python pipeline.py --max-docs 10000
+#    python pipeline.py --loop --poll-interval 300
+#    python pipeline.py --submit              # soumettre chaque detection tout de suite
+#    python pipeline.py --submit-dry-run
+#    python pipeline.py --reset-state       # curseur au debut flux DS2
 
-# 3. Verifier les detections avant envoi
+# 3. Verifier les detections avant envoi (fichier genere)
 python submit.py --dry-run
 
-# 4. Soumettre toutes les detections
+# 4. Soumettre toutes les detections du fichier
 python submit.py
 
 # 5. Soumettre une seule detection (par index ou challenge_id)
 python submit.py --index 0
+
+# 6. Lambda (infra) — voir sam/README.md
+#    cd sam && sam build --template-file template.yaml && sam deploy --guided
 ```
 
 ### Detecteurs implementes
@@ -273,6 +290,12 @@ SCORING_API_HEADERS = { ... }           # headers (Content-Type deja configure)
 
 `submit.py` gere automatiquement l'injection du header `Authorization: Bearer <key>` si `SCORING_API_KEY` est renseigné. Le score de chaque soumission est affiché avec breakdown détaillé et accumulé dans `scores_history.json`.
 
+### Timeline DS1 et variables d'environnement
+
+- Par défaut, `CND_DS1_CANONICAL_TIMELINE=1` : après Bedrock, `attack_start_time` / `attack_end_time` des 5 challenges DS1 sont remplacés par les bornes officielles du brief (voir `config.DS1_CANONICAL_ATTACK_WINDOWS` et `ds1_timeline.py`). Désactiver sur un autre dataset : `CND_DS1_CANONICAL_TIMELINE=0`.
+- Sans détection après dedup, la pipeline n'appelle pas Bedrock et écrit quand même `detections.json` (liste vide).
+- **Bonus rapidité** : `detection_time_seconds` est recalculé après enrichissement comme le nombre de secondes entre le plus ancien log du batch attribuable aux `attacker_ips` et l’instant de fin de traitement (voir `detection_timing.py`).
+
 ---
 
 ## Checklist jour J
@@ -292,7 +315,7 @@ SCORING_API_HEADERS = { ... }           # headers (Content-Type deja configure)
 
 ### Calibrage
 
-- [ ] Lancer `python pipeline.py --no-bedrock` sur le dataset complet
+- [ ] Lancer `python pipeline.py` (OpenSearch + Bedrock si détections ; optionnel : `python compare_ds1_timeline.py` sur un export local aligné avec le GT DS1)
 - [ ] Vérifier dans `detections.json` que les 5 challenges sont détectés (ni plus, ni moins)
 - [ ] Si faux positifs → augmenter les seuils (`*_MIN_*`) dans `config.py`
 - [ ] Si challenge manqué → baisser le seuil correspondant ou inspecter les logs
@@ -300,9 +323,9 @@ SCORING_API_HEADERS = { ... }           # headers (Content-Type deja configure)
 
 ### Pipeline temps réel
 
-- [ ] Tester `realtime_pipeline.py --dry-run` pour valider la connexion OpenSearch
-- [ ] Lancer `realtime_pipeline.py --reset` pour repartir depuis le début du flux
-- [ ] Vérifier que `.opensearch_state.json` est créé et mis à jour
+- [ ] Tester `python pipeline.py --submit-dry-run` ou `realtime_pipeline.py --dry-run` (alias boucle + soumission dry-run)
+- [ ] Lancer `python pipeline.py --loop --submit` (ou `realtime_pipeline.py` sans dry-run) ; curseur fichier `.opensearch_state.json` ou DynamoDB (`OPENSEARCH_STATE_BACKEND`)
+- [ ] Déployer `sam/` pour EventBridge 5 min + Lambda (curseur DynamoDB)
 
 ### Soumission
 

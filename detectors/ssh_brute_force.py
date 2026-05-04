@@ -155,7 +155,7 @@ def detect_ssh_brute_force(
             if found:
                 exfil_port = "/".join(str(p) for p in found)
 
-        indicators: dict = {"total_ssh_failures": len(merged)}
+        indicators: dict = {"failed_ssh": len(merged)}
         if lateral_targets:
             indicators["lateral_targets"] = lateral_targets
         if priv_esc:

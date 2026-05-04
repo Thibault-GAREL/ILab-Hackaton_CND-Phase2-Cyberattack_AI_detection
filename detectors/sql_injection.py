@@ -74,7 +74,7 @@ def detect_sql_injection(app_all: pd.DataFrame) -> list[dict]:
             if grp["user_agent"].dropna().apply(lambda u: bool(CHROME_RE.search(str(u)))).any():
                 tool_signature = "Chrome-like UA with automated patterns"
 
-        indicators: dict = {"sqli_requests": len(grp)}
+        indicators: dict = {"sqli_payloads": len(grp)}
         if exfil_bytes:
             indicators["exfil_bytes"] = exfil_bytes
         if tool_signature:
