@@ -17,10 +17,10 @@ sys.path.insert(0, str(ROOT))
 
 import pandas as pd  # noqa: E402
 
-import config  # noqa: E402
-import pipeline_core as pipeline  # noqa: E402
-from detectors.dedup import deduplicate  # noqa: E402
-from opensearch_connector import OpenSearchConnector  # noqa: E402
+from pipeline import config  # noqa: E402
+from pipeline.pipeline_core import split_logs_frame, run_detectors  # noqa: E402
+from pipeline.detectors.dedup import deduplicate  # noqa: E402
+from pipeline.opensearch_connector import OpenSearchConnector  # noqa: E402
 
 
 def _rss_mb() -> float:
@@ -62,10 +62,10 @@ def analyze_frame(df: pd.DataFrame) -> dict:
 def run_pipeline_on_df(df: pd.DataFrame) -> dict:
     rss0 = _rss_mb()
     t0 = time.perf_counter()
-    auth_all, auth_failures, app_all, net_all, sys_all = pipeline.split_logs_frame(df)
+    auth_all, auth_failures, app_all, net_all, sys_all = split_logs_frame(df)
     t_split = time.perf_counter() - t0
     t1 = time.perf_counter()
-    attacks = pipeline.run_detectors(
+    attacks = run_detectors(
         auth_failures, app_all, net_all, sys_all, auth_all=auth_all
     )
     t_det = time.perf_counter() - t1

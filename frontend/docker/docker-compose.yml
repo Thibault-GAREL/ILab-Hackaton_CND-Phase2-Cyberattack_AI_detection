@@ -1,0 +1,59 @@
+# Lancé depuis frontend/ : make docker-up
+# Contextes relatifs à ce fichier (frontend/docker/)
+
+services:
+  backend:
+    build:
+      # Racine du repo : backend/docker/Dockerfile copie backend/ et pipeline/
+      context: ../..
+      dockerfile: backend/docker/Dockerfile
+    container_name: cnd-phase2-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      # Origines additionnelles CORS (séparateur virgule), ex. http://192.168.1.10:3000
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+    volumes:
+      - ../../backend/data:/app/data
+      - ../../backend/models:/app/models
+      - ../../datasets/results:/app/data/results
+    networks:
+      - cnd-web
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      # Racine du repo : Dockerfile.streamlit fait COPY frontend/...
+      context: ../..
+      dockerfile: frontend/Dockerfile.streamlit
+    container_name: cnd-phase2-frontend
+    # Aligné Fargate : Streamlit écoute sur 3000 (même port hôte / conteneur)
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE=http://backend:8080
+      - BACKEND_URL=http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - cnd-web
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/_stcore/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+networks:
+  cnd-web:
+    driver: bridge

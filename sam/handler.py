@@ -19,8 +19,8 @@ def lambda_handler(event, context):
     os.environ.setdefault("DETECTIONS_JSON_PATH", "/tmp/detections.json")
     os.environ.setdefault("DETECTIONS_API_JSON_PATH", "/tmp/detections_api.json")
 
-    from opensearch_connector import OpenSearchConnector
-    from pipeline import process_one_poll
+    from pipeline.opensearch_connector import OpenSearchConnector
+    from pipeline.pipeline import process_one_poll
 
     dry = os.environ.get("SUBMIT_DRY_RUN", "").lower() in ("1", "true", "yes")
     md = os.environ.get("POLL_MAX_DOCS", "").strip()

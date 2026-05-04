@@ -1,36 +1,110 @@
-# CLAUDE.md — Hackathon Cybersécurité CND (Phase Dev)
+# CLAUDE.md — Hackathon Cybersécurité CND (Phase 2)
 
 ## Contexte du projet
 
-Hackathon organisé par le CND (EPITA/ESGI/ECE dont je fais partie) — Avril 2026.
+Hackathon organisé par le CND (EPITA/ESGI/ECE) — Mai 2026.
 
-**Objectif** : Construire une pipeline IA qui ingère des logs bruts de cybersécurité, détecte des attaques, les analyse, et soumet les résultats via une API REST au format JSON standardisé. La partie front et backend pour afficher les résultats est déjà faite, mais concentre toi sur l'appel direct à l'API de scoring.
+**Objectif** : Pipeline IA qui ingère des logs bruts de cybersécurité depuis OpenSearch, détecte 5 types d'attaques, enrichit via Bedrock Claude Opus 4.6, et soumet les résultats à l'API de scoring.
 
 ## Architecture
 
 ```
 OpenSearch (index logs-raw, delta + search_after)
-    → split_logs_frame()             ← auth / app / net / sys par log_source
-    → 5 détecteurs ciblés            ← un par challenge DS1
-    → deduplicate()                  ← évite les doublons (rare : IPs distinctes)
-    → enrich_detections()            ← Bedrock obligatoire si ≥1 détection
-    → apply_ds1_canonical_windows()  ← fenêtres DS1 (désactiver CND_DS1_CANONICAL_TIMELINE=0 en finale DS2)
-    → detection_time_seconds        ← délai depuis preuve dans le batch (bonus < 300 s)
-    → detections.json (+ API)      ← sortie locale ; ou --submit vers l'API
+ → split_logs_frame()               ← auth / app / net / sys par log_source
+ → 5 détecteurs ciblés              ← un par challenge DS1
+ → deduplicate()                    ← keep_most_specific (par IP/fenêtre)
+ → enrich_detections()              ← Bedrock si BEDROCK_ENABLED=1 (kill switch off)
+ → apply_ds1_canonical_windows()    ← fenêtres DS1 (CND_DS1_CANONICAL_TIMELINE=0 pour DS2)
+ → apply_ds1_ioc_canonicalization() ← noms de clés alignés sur ground truth
+ → attach_remediation_plans()       ← plans d'action par type d'attaque
+ → detection_time_seconds           ← 0 en finale ; chrono optionnel si SCORING_BONUS_RAPIDITE_ENABLED=1
+ → detections.json (+ API)          ← sortie locale ; ou --submit vers l'API
 ```
 
-Déploiement planifié : voir `sam/` (EventBridge `rate(5 minutes)` → Lambda, curseur DynamoDB).
+## Structure du projet
+
+```text
+ILab-Hackaton_CND-Phase2-Cyberattack_AI_detection/
+├── pipeline/                       ← Package Python — pipeline de détection
+│   ├── __init__.py
+│   ├── __main__.py                 ← python -m pipeline
+│   ├── config.py                   ← Tous les paramètres (API, seuils, AWS)
+│   ├── pipeline.py                 ← Point d'entrée : OpenSearch + détecteurs + Bedrock
+│   ├── pipeline_core.py            ← split_logs_frame + run_detectors
+│   ├── detection_run.py            ← Chaîne dedup / Bedrock / DS1 / soumission batch
+│   ├── detection_timing.py         ← detection_time_seconds (0 par défaut, mode slices)
+│   ├── detection_api.py            ← Conversion format API
+│   ├── bedrock_analysis.py         ← Enrichissement Bedrock (Claude Opus 4.6)
+│   ├── bedrock_os_context.py       ← Contexte OpenSearch élargi pour Bedrock
+│   ├── ds1_timeline.py             ← Normalisation fenêtres DS1 après enrichissement
+│   ├── ds1_ioc_canonical.py        ← Normalisation des clés IoC
+│   ├── remediation.py              ← Plans de remédiation par challenge
+│   ├── submit.py                   ← Soumet detections.json à l'API de scoring
+│   ├── submit_cache.py             ← Fingerprint + cache anti-doublons
+│   ├── opensearch_connector.py     ← Connecteur OpenSearch (Basic / SigV4)
+│   ├── opensearch_state.py         ← Curseur poll (fichier ou DynamoDB)
+│   ├── realtime_pipeline.py        ← Alias vers pipeline.run_realtime_compat
+│   ├── compare_ds1_timeline.py     ← Comparaison timeline vs ground truth
+│   └── detectors/                  ← 5 détecteurs DS1 + dedup + utils
+│       ├── __init__.py
+│       ├── credential_stuffing.py  ← Challenge 1 : auth failures + 401 → web shell + reverse shell
+│       ├── ssh_brute_force.py      ← Challenge 2 : SSH brute force → lateral + priv_esc
+│       ├── sql_injection.py        ← Challenge 3 : SQLi dans les URIs → exfil
+│       ├── directory_traversal.py  ← Challenge 4 : ../ dans les URIs → fichiers sensibles
+│       ├── ssrf.py                 ← Challenge 5 : IPs internes dans les URIs → metadata
+│       ├── dedup.py                ← Déduplication des détections chevauchantes
+│       └── utils.py                ← fmt_ts(), split_sessions(), group_ips_by_overlap()
+├── backend/                        ← API FastAPI
+│   └── src/app/
+│       ├── main.py                 ← Application FastAPI
+│       ├── config.py               ← Settings Pydantic
+│       ├── security.py             ← Middleware sécurité
+│       ├── routers/
+│       │   ├── health.py           ← GET /health
+│       │   └── logs.py             ← POST /v1/logs/search, GET /v1/logs/stats
+│       ├── schemas/                ← Modèles Pydantic (ingest, prediction, topology, etc.)
+│       ├── services/               ← Logique métier (modeling, planning, explainability, etc.)
+│       └── utils/                  ← Helpers (seed, timers)
+├── frontend/                       ← Interface Streamlit
+│   ├── streamlit_app.py            ← Application principale (3 pages)
+│   └── src/fixtures/               ← Données mockées pour le développement
+├── sam/                            ← AWS SAM (Lambda + EventBridge + table curseur)
+│   ├── template.yaml
+│   └── handler.py
+├── scripts/                        ← Benchmarks, vérifications, tests
+│   ├── benchmark_and_report.py
+│   ├── benchmark_opensearch_report.py
+│   ├── smoke_bedrock_timeline.py
+│   ├── test_ds1_ioc_canonical.py
+│   └── opensearch_verify_sample.py
+├── docs/                           ← Documentation complète
+│   ├── README.md
+│   ├── architecture.md
+│   ├── pipeline.md
+│   ├── api-reference.md
+│   ├── deployment.md
+│   └── scoring-format.md
+├── datasets/results/               ← CSV classifiés (phase 1)
+├── CLAUDE.md                       ← Ce fichier
+└── README.md
+```
+
+**Imports** : Le package `pipeline/` utilise des imports relatifs (ex. `from .config import ...`, `from .detectors.dedup import ...`). Lancer la pipeline via `python -m pipeline` depuis la racine du projet.
 
 ## Dataset
 
-### Fichier local (optionnel — bench / import)
-- **Path** : `Dataset_log/logs-raw-merged.parquet` (non utilisé par `pipeline.py` ; bench `scripts/benchmark_and_report.py`)
+### Flux continu (OpenSearch — Phase Dev + Finale)
+- **Index** : `logs-raw`
+- **Fréquence** : toutes les 5 minutes, 50-100 logs par batch
+- **Region** : `eu-west-3`
+- **Auth** : FGAC Basic (user `etudiant`)
+
+### Fichier local (optionnel — bench)
+- **Path** : `Dataset_log/logs-raw-merged.parquet`
 - **Taille** : 21 017 848 lignes, 33 colonnes
-- **Attention** : Trop grand pour être chargé en RAM d'un coup — toujours lire par chunks avec `pyarrow.parquet.ParquetFile.iter_batches()`
+- **Attention** : Trop grand pour la RAM — lire par chunks avec `pyarrow.parquet.ParquetFile.iter_batches()`
 
-Dans le futur, il faudra que ce soit un appel API REST (POST) vers OpenSearch.
-
-### Schema des logs (33 colonnes)
+### Schéma des logs (33 colonnes)
 
 | Colonne | Type | Description |
 |---|---|---|
@@ -67,14 +141,7 @@ Dans le futur, il faudra que ce soit un appel API REST (POST) vers OpenSearch.
 | `message` | string | Message système brut |
 | `facility` | string | Facility syslog |
 
-### Flux continu (OpenSearch — Phase Dev + Finale)
-- **Index** : `logs-raw`
-- **Fréquence** : toutes les 5 minutes, 50-100 logs par batch
-- **Timeline** : continue après le 31 janvier 2026
-
 ## Ground Truth DS1 — 5 challenges cibles
-
-Ces 5 attaques sont les seules présentes dans le dataset DS1. La pipeline doit les détecter toutes et uniquement elles.
 
 | Challenge ID | Type | IPs attaquantes | Victime | Fenêtre | Points max |
 |---|---|---|---|---|---|
@@ -84,12 +151,10 @@ Ces 5 attaques sont les seules présentes dans le dataset DS1. La pipeline doit 
 | `directory_traversal` | Path traversal → lecture fichiers sensibles | 198.51.100.200 | aucun | 23/01 10h00 → 12h00 | 80 |
 | `ssrf` | SSRF → accès metadata + services internes | 203.0.113.100 | aucun | 26/01 11h00 → 12h00 | 80 |
 
-Attention, dans le `Dataset_log\ground-truth-ds1.json` il y a uniquement 1 erreur pour chaque type possible, mais c'est très probable que dans le dataset global `Dataset_log\logs-raw-merged.parquet`, il y en ai plus bien sûr ! Il faut donc ajuster la sensibilité en fonction de si c'est une attaque ou non de façon intelligente.
-
 ### Indicateurs IoC attendus par challenge
 
 **credential_stuffing** — sources : auth + application + network + system
-- `failed_logins` : ~3500 (auth failures + 401 HTTP combinés)
+- `failed_logins` : ~3500
 - `web_shell` : `/uploads/image_2026.php`
 - `reverse_shell_port` : 4444
 - `geolocation` : `Beijing`
@@ -102,7 +167,7 @@ Attention, dans le `Dataset_log\ground-truth-ds1.json` il y a uniquement 1 erreu
 
 **sql_injection** — sources : application + network + system
 - `sqli_requests` : ~300
-- `exfil_bytes` : ~25 000 000 octets (~25 MB)
+- `exfil_bytes` : ~25 000 000
 - `tool_signature` : `Chrome-like UA with automated patterns`
 
 **directory_traversal** — sources : application + network + system
@@ -139,7 +204,7 @@ Attention, dans le `Dataset_log\ground-truth-ds1.json` il y a uniquement 1 erreu
 
 - Timestamps : ISO 8601, timezone UTC
 - `victim_accounts` : liste vide `[]` si aucun compte ciblé
-- Chaque challenge est soumis séparément avec son propre `challenge_id`
+- Chaque challenge est soumis séparément
 
 ## Système de scoring
 
@@ -150,185 +215,134 @@ Attention, dans le `Dataset_log\ground-truth-ds1.json` il y a uniquement 1 erreu
 | Comptes victimes | 20 pts | Score F1 (gratuit si aucun dans le ground truth) |
 | Timeline | 20 pts | Tolérance ±5 min, 0 pts au-delà de ±10 min |
 | Indicateurs IoC | 20 pts | Matching par clé avec tolérance |
-| **Bonus rapidité** | +50 pts | Si détection < 5 minutes |
 | **Pénalité faux positifs** | -10 pts/FP | Par faux positif déclaré |
-| **TOTAL MAX** | **150 pts** | |
+| **TOTAL MAX** | **100 pts** | Par challenge (mode finale, 5 × 20 pts) |
 
-**Seuil de validation** : 70 pts (soumissions en dessous ignorées du leaderboard)
+**Seuil de validation** : 70 pts.
+
+## Mode finale : ingestion par slices
+
+Les logs sont injectés en **3 lots successifs** (slices). Le payload fixe **`detection_time_seconds = 0`** ; le score par challenge reste **100 pts** max (5 critères).
+
+- `CND_DS1_CANONICAL_TIMELINE=0` et `CND_DS1_CANONICAL_IOCS=0` par défaut
+- `SCORING_BONUS_RAPIDITE_ENABLED=0` par défaut
+- `SUBMIT_SKIP_DUPLICATES=1` avec fingerprint robuste (challenge_id + IPs, sans fenêtres)
+- Option `--accumulate` : merger les détections entre slices (fenêtres élargies)
+- La pipeline peut être relancée après chaque lot ; le cache anti-doublons empêche les re-soumissions
 
 ## Infra AWS disponible
 
-- **Amazon OpenSearch** : accès read-only à l'index `logs-raw` (région `eu-west-3`)
-- **Amazon Bedrock** : Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) via `boto3`
-- **Amazon SageMaker** : notebooks + endpoints (`ml.t3.xlarge`, `ml.g4dn.xlarge`)
-- **AWS Lambda** : fonctions serverless pour la pipeline temps réel
-- **Amazon S3** : stockage modèles et données
-- **Amazon DynamoDB** : cache de résultats
+- **Amazon OpenSearch** : index `logs-raw` (région `eu-west-3`)
+- **Amazon Bedrock** : Claude Opus 4.6 (`eu.anthropic.claude-opus-4-6-v1`) via `boto3`
+- **Amazon SageMaker** : notebooks + endpoints
+- **AWS Lambda** : pipeline temps réel (SAM)
+- **Amazon S3** : stockage artefacts
+- **Amazon DynamoDB** : curseur pipeline
+- **ECS Fargate** : backend + frontend
 
 ```python
-# Exemple appel Bedrock
 import boto3
 client = boto3.client("bedrock-runtime", region_name="eu-west-3")
 response = client.converse(
-    modelId="anthropic.claude-opus-4-6-v1",
+    modelId="eu.anthropic.claude-opus-4-6-v1",
     messages=[{"role": "user", "content": [{"text": "prompt ici"}]}],
     inferenceConfig={"maxTokens": 4096}
 )
 ```
 
-## Environnement Python local
-
-- Venv : `c:\0-Code_py_temp\pytorch_cuda_env\Scripts\python.exe`
-- Lire le parquet par chunks (OOM sinon) :
-```python
-import pyarrow.parquet as pq
-pf = pq.ParquetFile('Dataset_log/logs-raw-merged.parquet')
-for batch in pf.iter_batches(batch_size=100_000):
-    df = batch.to_pandas()
-    # traitement...
-```
-
----
-
-## Pipeline de detection
-
-### Structure du projet
-
-```text
-ILab_Hackathon-CND-Phase2/
-├── config.py                  ← Tous les parametres (API, seuils, AWS)
-├── pipeline.py                ← Point d'entree : OpenSearch + detecteurs + Bedrock
-├── pipeline_core.py           ← split_logs_frame + run_detectors (partage scripts)
-├── detection_run.py           ← Chaine dedup / Bedrock / soumission batch
-├── detection_timing.py        ← detection_time_seconds (bonus rapidite)
-├── submit.py                  ← Soumet detections.json a l'API de scoring
-├── bedrock_analysis.py        ← Enrichissement Bedrock (Claude Opus)
-├── ds1_timeline.py            ← Normalisation fenêtres DS1 après enrichissement
-├── opensearch_state.py        ← Curseur poll (fichier ou DynamoDB)
-├── realtime_pipeline.py       ← Alias vers pipeline.run_realtime_compat
-├── opensearch_connector.py    ← Connecteur OpenSearch
-├── sam/                       ← SAM (Lambda + EventBridge + table curseur)
-├── detections.json            ← Genere par pipeline.py (a reviewer avant soumission)
-├── scores_history.json        ← Historique des scores par soumission
-├── ground-truth-ds1.json      ← Ground truth officiel des 5 challenges DS1
-└── detectors/
-    ├── credential_stuffing.py ← Challenge 1 : auth failures + 401 → web shell + reverse shell
-    ├── ssh_brute_force.py     ← Challenge 2 : SSH brute force → lateral + priv_esc
-    ├── sql_injection.py       ← Challenge 3 : SQLi dans les URIs → exfil
-    ├── directory_traversal.py ← Challenge 4 : ../ dans les URIs → fichiers sensibles
-    ├── ssrf.py                ← Challenge 5 : IPs internes dans les URIs → metadata
-    ├── dedup.py               ← Deduplication des detections qui se chevauchent
-    └── utils.py               ← fmt_ts(), split_sessions(), group_ips_by_overlap()
-```
+## Pipeline de détection
 
 ### Workflow
 
 ```bash
-# 1. Remplir config.py + .env (SCORING_API_URL, SCORING_API_KEY, OPENSEARCH_HOST, credentials Basic)
-# 2. Une passe OpenSearch -> detections.json (+ API JSON)
-python pipeline.py
-#    python pipeline.py --max-docs 10000
-#    python pipeline.py --loop --poll-interval 300
-#    python pipeline.py --submit              # soumettre chaque detection tout de suite
-#    python pipeline.py --submit-dry-run
-#    python pipeline.py --reset-state       # curseur au debut flux DS2
+# Lancer la pipeline (une passe)
+python -m pipeline
 
-# 3. Verifier les detections avant envoi (fichier genere)
-python submit.py --dry-run
-
-# 4. Soumettre toutes les detections du fichier
-python submit.py
-
-# 5. Soumettre une seule detection (par index ou challenge_id)
-python submit.py --index 0
-
-# 6. Lambda (infra) — voir sam/README.md
-#    cd sam && sam build --template-file template.yaml && sam deploy --guided
+# Options
+python -m pipeline --max-docs 10000
+python -m pipeline --loop --poll-interval 300
+python -m pipeline --submit
+python -m pipeline --submit-dry-run
+python -m pipeline --reset-state
+python -m pipeline --no-dedup
 ```
 
-### Detecteurs implementes
+### Détecteurs implémentés
 
-| Detecteur | Sources | Signal principal | Challenge ID |
-| --- | --- | --- | --- |
-| `credential_stuffing` | auth + app + net | N 401 HTTP + N echecs auth non-SSH → groupe les IPs en campagne, detecte web shell et reverse shell | `credential_stuffing` |
-| `ssh_brute_force` | auth + sys + net | N echecs auth avec `auth_method=ssh` → groupe les IPs, detecte lateral/priv_esc/exfil | `ssh_brute_force` |
-| `sql_injection` | app | URI contient keywords SQL (`UNION`, `SELECT`, `'`, `--`…) | `sql_injection` |
-| `directory_traversal` | app | URI contient `../` ou variantes encodees | `directory_traversal` |
+| Détecteur | Sources | Signal principal | Challenge ID |
+|---|---|---|---|
+| `credential_stuffing` | auth + app + net | 401 HTTP + échecs auth non-SSH → campagne multi-IP | `credential_stuffing` |
+| `ssh_brute_force` | auth + sys + net | Échecs SSH → lateral/priv_esc/exfil | `ssh_brute_force` |
+| `sql_injection` | app | URI contient payloads SQL (`UNION`, `SELECT`, `'`, `--`) | `sql_injection` |
+| `directory_traversal` | app | URI contient `../` ou variantes encodées | `directory_traversal` |
 | `ssrf` | app + net | URI contient IP interne ou `169.254.169.254` | `ssrf` |
 
-> **Note** : `credential_stuffing` et `ssh_brute_force` utilisent `group_ips_by_overlap()` pour fusionner les IPs attaquant dans la même fenêtre temporelle en une seule détection multi-IP. Tolérance : `CAMPAIGN_OVERLAP_MINUTES = 90`.
+`credential_stuffing` et `ssh_brute_force` utilisent `group_ips_by_overlap()` pour fusionner les IPs en campagne. Tolérance : `CAMPAIGN_OVERLAP_MINUTES = 90`.
 
-### Calibrage des seuils (config.py)
-
-Augmenter un seuil → moins de détections → moins de faux positifs (`-10 pts/FP`).
+### Calibrage des seuils (pipeline/config.py)
 
 ```python
-# Credential stuffing
-CREDENTIAL_STUFFING_MIN_401     = 20   # 401 HTTP + echecs auth non-SSH minimum
-CAMPAIGN_OVERLAP_MINUTES        = 90   # tolerance (min) pour grouper deux IPs en campagne
-
-# SSH brute force
-SSH_BRUTE_FORCE_MIN_FAILURES    = 20   # echecs SSH minimum par IP
-
-# SQL injection
-SQL_INJECTION_MIN_REQUESTS      = 5    # requetes avec payload SQL minimum
-
-# Directory traversal
-DIRECTORY_TRAVERSAL_MIN_ATTEMPTS = 3  # tentatives de traversal minimum
-
-# SSRF
-SSRF_MIN_REQUESTS               = 3   # requetes avec IP interne dans l URI minimum
+CREDENTIAL_STUFFING_MIN_401      = 20
+SSH_BRUTE_FORCE_MIN_FAILURES     = 20
+SQL_INJECTION_MIN_REQUESTS       = 50
+SQL_INJECTION_MIN_EXFIL_BYTES    = 1_000_000
+DIRECTORY_TRAVERSAL_MIN_ATTEMPTS = 100
+SSRF_MIN_REQUESTS                = 100
+CAMPAIGN_OVERLAP_MINUTES         = 90
 ```
 
-### Configuration API (config.py)
+### Soumission
 
-```python
-SCORING_API_URL     = "https://..."     # URL POST de l'API
-SCORING_API_KEY     = ""                # cle API si requise
-SCORING_API_HEADERS = { ... }           # headers (Content-Type deja configure)
+```bash
+python -m pipeline.submit --dry-run   # vérifier les payloads
+python -m pipeline.submit             # soumettre tout
+python -m pipeline.submit --index 0   # soumettre #0 uniquement
 ```
 
-`submit.py` gere automatiquement l'injection du header `Authorization: Bearer <key>` si `SCORING_API_KEY` est renseigné. Le score de chaque soumission est affiché avec breakdown détaillé et accumulé dans `scores_history.json`.
+### Variables d'environnement clés
 
-### Timeline DS1 et variables d'environnement
+- `CND_DS1_CANONICAL_TIMELINE=1` : fenêtres DS1 officielles (désactiver pour DS2 : `=0`)
+- `CND_DS1_CANONICAL_IOCS=1` : noms de clés IoC alignés sur ground truth (désactiver pour DS2 : `=0`)
+- `BEDROCK_DROP_LOW_ENRICHMENT_CONFIDENCE=1` : retirer les détections `confidence=low`
+- `OPENSEARCH_STATE_BACKEND=file|dynamodb` : stockage du curseur
 
-- Par défaut, `CND_DS1_CANONICAL_TIMELINE=1` : après Bedrock, `attack_start_time` / `attack_end_time` des 5 challenges DS1 sont remplacés par les bornes officielles du brief (voir `config.DS1_CANONICAL_ATTACK_WINDOWS` et `ds1_timeline.py`). Désactiver sur un autre dataset : `CND_DS1_CANONICAL_TIMELINE=0`.
-- Sans détection après dedup, la pipeline n'appelle pas Bedrock et écrit quand même `detections.json` (liste vide).
-- **Bonus rapidité** : `detection_time_seconds` est recalculé après enrichissement comme le nombre de secondes entre le plus ancien log du batch attribuable aux `attacker_ips` et l’instant de fin de traitement (voir `detection_timing.py`).
+## Backend FastAPI
 
----
+Routes principales :
+- `GET /health` — état du service
+- `GET /v1/detections` — liste des détections
+- `GET /v1/detections/{id}` — détail d'une détection
+- `GET /v1/detections/stats/summary` — statistiques agrégées
+- `POST /v1/pipeline/run` — déclencher un poll
+- `GET /v1/remediation/catalog` — catalogue remédiation
+- `GET /v1/remediation/{challenge_id}` — plan par type d'attaque
+- `POST /v1/remediation/validate` — valider un plan
+
+## Frontend Streamlit
+
+3 pages : détections (tableau de bord), remédiation (plans d'action), architecture (diagramme).
 
 ## Checklist jour J
 
 ### Credentials & accès
+- [ ] `aws configure sso` (region `eu-west-3`)
+- [ ] Vérifier `aws sts get-caller-identity`
 
-- [ ] Activer le compte SSO AWS (email d'invitation)
-- [ ] Configurer `aws configure sso` (region `eu-west-3`)
-- [ ] Vérifier l'accès à la console AWS
-
-### config.py — valeurs à remplir
-
-- [ ] `SCORING_API_URL` — URL POST de l'API de scoring
-- [ ] `SCORING_API_KEY` — clé API si requise (laisser vide sinon)
-- [ ] `OPENSEARCH_HOST` — URL de l'instance OpenSearch
-- [ ] Adapter `SCORING_API_HEADERS` si le format d'auth diffère de `Bearer`
+### Configuration (pipeline/.env)
+- [ ] `OPENSEARCH_BASIC_PASSWORD`
+- [ ] `SCORING_API_URL`
+- [ ] `SCORING_API_KEY` (si requise)
 
 ### Calibrage
-
-- [ ] Lancer `python pipeline.py` (OpenSearch + Bedrock si détections ; optionnel : `python compare_ds1_timeline.py` sur un export local aligné avec le GT DS1)
-- [ ] Vérifier dans `detections.json` que les 5 challenges sont détectés (ni plus, ni moins)
-- [ ] Si faux positifs → augmenter les seuils (`*_MIN_*`) dans `config.py`
-- [ ] Si challenge manqué → baisser le seuil correspondant ou inspecter les logs
-- [ ] Vérifier que `BEDROCK_ENABLED = True` et que les credentials AWS donnent accès à Bedrock
+- [ ] `python -m pipeline` → vérifier `detections.json` (5 challenges exactement)
+- [ ] Si faux positifs → augmenter les seuils dans `pipeline/config.py`
+- [ ] Vérifier `BEDROCK_ENABLED = True`
 
 ### Pipeline temps réel
-
-- [ ] Tester `python pipeline.py --submit-dry-run` ou `realtime_pipeline.py --dry-run` (alias boucle + soumission dry-run)
-- [ ] Lancer `python pipeline.py --loop --submit` (ou `realtime_pipeline.py` sans dry-run) ; curseur fichier `.opensearch_state.json` ou DynamoDB (`OPENSEARCH_STATE_BACKEND`)
-- [ ] Déployer `sam/` pour EventBridge 5 min + Lambda (curseur DynamoDB)
+- [ ] `python -m pipeline --submit-dry-run` (test)
+- [ ] `python -m pipeline --loop --submit` (production)
 
 ### Soumission
-
-- [ ] Faire un `python submit.py --dry-run` pour relire les payloads avant envoi
-- [ ] Soumettre avec `python submit.py` et vérifier les scores dans la console
-- [ ] Consulter `scores_history.json` pour comparer les itérations et ajuster les seuils
+- [ ] `python -m pipeline.submit --dry-run`
+- [ ] `python -m pipeline.submit`
+- [ ] Consulter `scores_history.json`

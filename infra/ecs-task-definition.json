@@ -1,0 +1,71 @@
+{
+  "family": "cnd-phase2",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::432837989348:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::432837989348:role/cnd-phase2-task-role",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "432837989348.dkr.ecr.eu-west-3.amazonaws.com/dirisi-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {"name": "ENV", "value": "production"},
+        {"name": "CORS_ORIGINS", "value": "http://51.44.250.151:3000,http://ec2-51-44-250-151.eu-west-3.compute.amazonaws.com:3000"},
+        {"name": "DETECTIONS_JSON_PATH", "value": "/app/detections.json"},
+        {"name": "OPENSEARCH_AUTH", "value": "basic"},
+        {"name": "OPENSEARCH_BASIC_USER", "value": "etudiant"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cnd-phase2",
+          "awslogs-region": "eu-west-3",
+          "awslogs-stream-prefix": "backend"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import requests; requests.get('http://localhost:8080/health', timeout=3).raise_for_status()\""],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3
+      }
+    },
+    {
+      "name": "frontend",
+      "image": "432837989348.dkr.ecr.eu-west-3.amazonaws.com/dirisi-frontend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {"name": "BACKEND_URL", "value": "http://127.0.0.1:8080"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cnd-phase2",
+          "awslogs-region": "eu-west-3",
+          "awslogs-stream-prefix": "frontend"
+        }
+      },
+      "dependsOn": [
+        {
+          "containerName": "backend",
+          "condition": "HEALTHY"
+        }
+      ]
+    }
+  ]
+}

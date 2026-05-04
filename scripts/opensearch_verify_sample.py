@@ -14,8 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from opensearch_connector import OpenSearchConnector  # noqa: E402
-from config import OPENSEARCH_TIMESTAMP_FIELD  # noqa: E402
+from pipeline.opensearch_connector import OpenSearchConnector  # noqa: E402
+from pipeline.config import OPENSEARCH_TIMESTAMP_FIELD  # noqa: E402
 
 
 def main() -> int:

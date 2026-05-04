@@ -54,7 +54,7 @@ Resources:
       BuildProperties:
         Manifest: sam/requirements.txt
     Properties:
-      CodeUri: ../
+      CodeUri: ..
       Handler: sam.handler.lambda_handler
       Environment:
         Variables:

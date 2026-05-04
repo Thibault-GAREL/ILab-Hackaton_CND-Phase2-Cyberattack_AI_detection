@@ -18,10 +18,10 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd
 import pyarrow.parquet as pq
 
-import config  # noqa: E402
-import pipeline_core  # noqa: E402
-from detectors.dedup import deduplicate  # noqa: E402
-from pipeline_core import split_logs_frame  # noqa: E402
+from pipeline import config  # noqa: E402
+from pipeline import pipeline_core  # noqa: E402
+from pipeline.detectors.dedup import deduplicate  # noqa: E402
+from pipeline.pipeline_core import split_logs_frame  # noqa: E402
 
 
 def _rss_mb() -> float:

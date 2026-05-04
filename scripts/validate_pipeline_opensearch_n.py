@@ -152,10 +152,10 @@ def main() -> int:
 
     import pandas as pd
 
-    from opensearch_connector import OpenSearchConnector
-    from pipeline_core import split_logs_frame, run_detectors
-    from detectors.dedup import deduplicate
-    from bedrock_analysis import enrich_detections, get_bedrock_metrics
+    from pipeline.opensearch_connector import OpenSearchConnector
+    from pipeline.pipeline_core import split_logs_frame, run_detectors
+    from pipeline.detectors.dedup import deduplicate
+    from pipeline.bedrock_analysis import enrich_detections, get_bedrock_metrics
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     lines: list[str] = [

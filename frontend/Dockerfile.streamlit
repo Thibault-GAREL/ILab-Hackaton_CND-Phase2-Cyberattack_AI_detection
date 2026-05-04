@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY frontend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY frontend/streamlit_app.py ./streamlit_app.py
+COPY frontend/pages/ ./pages/
+COPY frontend/src/ ./src/
+COPY frontend/.streamlit/ ./.streamlit/
+
+# ECS (même tâche que le backend) : requêtes API depuis le conteneur front.
+# Docker Compose surpasse avec BACKEND_URL=http://backend:8080
+ENV BACKEND_URL=http://127.0.0.1:8080
+
+# Fargate awsvpc : le port exposé sur l’ENI = containerPort (pas de map 3000→8501).
+# On écoute donc en 3000 pour coller aux URLs documentées (http://<IP>:3000).
+EXPOSE 3000
+
+HEALTHCHECK --interval=20s --timeout=8s --retries=5 --start-period=40s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/_stcore/health', timeout=5).read()"
+
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=3000", "--server.address=0.0.0.0", "--server.headless=true", "--client.showSidebarNavigation", "false"]

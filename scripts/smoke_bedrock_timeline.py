@@ -24,7 +24,7 @@ if str(ROOT) not in sys.path:
 import boto3  # noqa: E402
 from botocore.exceptions import ClientError  # noqa: E402
 
-from config import BEDROCK_REGION, BEDROCK_TIMELINE_MODEL_CANDIDATES  # noqa: E402
+from pipeline.config import BEDROCK_REGION, BEDROCK_TIMELINE_MODEL_CANDIDATES  # noqa: E402
 
 
 def _hint_after_error(exc: ClientError) -> None:

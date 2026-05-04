@@ -17,7 +17,8 @@
       "failed_logins": 3594,
       "web_shell": "/uploads/image_2026.php?cmd=ps aux",
       "reverse_shell_port": 4444,
-      "geolocation": "CN"
+      "geolocation": "Beijing",
+      "remediation_proposed": "Block attacker IPs on AWS WAF + Reset compromised credentials + Remove web shell"
     }
   },
   {
@@ -51,7 +52,8 @@
         "web-prod-02"
       ],
       "priv_esc": "sudo + backdoor user",
-      "exfil_port": "443/8443"
+      "exfil_port": "443/8443",
+      "remediation_proposed": "Block IPs on Security Group + Restrict SSH to bastion + Audit authorized_keys"
     }
   },
   {
@@ -68,7 +70,8 @@
     "indicators": {
       "sqli_requests": 515,
       "exfil_bytes": 31240915,
-      "tool_signature": "Chrome-like UA with automated patterns"
+      "tool_signature": "Chrome-like UA with automated patterns",
+      "remediation_proposed": "Enable WAF SQLi managed rules + Restrict DB security group + Rate limit sensitive URIs"
     }
   },
   {
@@ -92,7 +95,8 @@
         "/etc/shadow",
         "/root/.ssh/id_rsa",
         "/var/log/auth.log"
-      ]
+      ],
+      "remediation_proposed": "Block path traversal patterns on WAF + Review S3 public access + Tighten IAM app role"
     }
   },
   {
@@ -107,7 +111,6 @@
     "end_time": "2026-01-26T12:13:30Z",
     "severity": "high",
     "indicators": {
-      "ssrf_requests": 300,
       "ssrf_targets": [
         "10.0.1.10:22",
         "10.0.1.10:80",
@@ -130,7 +133,8 @@
         "10.0.9.10:3306",
         "169.254.169.254"
       ],
-      "internal_traffic_from_web": true
+      "internal_traffic_from_web": true,
+      "remediation_proposed": "Block internal IPs in WAF rules + Enforce IMDSv2 + Audit egress security groups"
     }
   }
 ]

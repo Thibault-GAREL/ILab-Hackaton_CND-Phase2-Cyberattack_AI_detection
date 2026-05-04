@@ -12,11 +12,11 @@ sys.path.insert(0, str(ROOT))
 # Desactiver canon globale pour tester le module avec monkeypatch local
 os.environ.setdefault("CND_DS1_CANONICAL_IOCS", "1")
 
-from ds1_ioc_canonical import (  # noqa: E402
+from pipeline.ds1_ioc_canonical import (  # noqa: E402
     apply_ds1_ioc_canonicalization,
     canonicalize_ds1_indicators,
 )
-from detection_run import public_detection_payload  # noqa: E402
+from pipeline.detection_run import public_detection_payload  # noqa: E402
 
 
 def _assert(cond: bool, msg: str) -> None:

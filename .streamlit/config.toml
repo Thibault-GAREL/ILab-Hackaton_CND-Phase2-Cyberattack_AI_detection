@@ -1,0 +1,3 @@
+# Utilisé si vous lancez : streamlit run frontend/streamlit_app.py depuis la racine du dépôt.
+[client]
+showSidebarNavigation = false
