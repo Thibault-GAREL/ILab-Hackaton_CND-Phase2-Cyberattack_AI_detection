@@ -16,6 +16,7 @@ from detectors.dedup import deduplicate
 from detection_timing import apply_detection_latency_seconds
 from ds1_timeline import apply_ds1_canonical_windows
 from opensearch_connector import OpenSearchConnector
+from remediation import attach_remediation_plans
 from pipeline_core import run_detectors, split_logs_frame
 from submit import submit_detection
 from submit_cache import (
@@ -69,6 +70,7 @@ def run_detection_chain(
         apply_ds1_ioc_canonicalization(attacks)
 
     apply_detection_latency_seconds(attacks, batch_df)
+    attach_remediation_plans(attacks)
     return attacks
 
 

@@ -8,8 +8,12 @@ Usage standalone :
     uvicorn detection_api:app --port 8081
 
 Usage intégré au backend Phase 1 :
-    from detection_api import detections_router
+    from detection_api import detections_router, remediation_router
     app.include_router(detections_router)
+    app.include_router(remediation_router)
+
+Remédiation (playbooks AWS, sans exécution) : GET /v1/remediation/catalog ;
+chaque entrée de detections.json inclut une clé racine `remediation` après pipeline.
 """
 
 import json
@@ -140,9 +144,21 @@ async def detections_stats():
     }
 
 
+remediation_router = APIRouter(prefix="/v1/remediation", tags=["remediation"])
+
+
+@remediation_router.get("/catalog")
+async def remediation_catalog():
+    """Apercu des playbooks AWS par type d attaque (sans execution)."""
+    from remediation import remediation_playbooks_catalog
+
+    return remediation_playbooks_catalog()
+
+
 # ---------------------------------------------------------------------------
 # Standalone app (pour tester sans le backend Phase 1)
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="CND Phase 2 — Detection API", version="0.1.0")
 app.include_router(detections_router)
+app.include_router(remediation_router)
