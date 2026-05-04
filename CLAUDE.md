@@ -13,7 +13,8 @@ OpenSearch (index logs-raw, delta + search_after)
  → split_logs_frame()               ← auth / app / net / sys par log_source
  → 5 détecteurs ciblés              ← un par challenge DS1
  → deduplicate()                    ← keep_most_specific (par IP/fenêtre)
- → enrich_detections()              ← Bedrock si BEDROCK_ENABLED=1 (kill switch off)
+ → [BEDROCK_SKILL_MODE=1] RECOMMENDATION → CRITIQUE (anti-hallu, défaut)
+   OU [BEDROCK_SKILL_MODE=0] enrich_detections() legacy
  → apply_ds1_canonical_windows()    ← fenêtres DS1 (CND_DS1_CANONICAL_TIMELINE=0 pour DS2)
  → apply_ds1_ioc_canonicalization() ← noms de clés alignés sur ground truth
  → attach_remediation_plans()       ← plans d'action par type d'attaque
@@ -28,6 +29,8 @@ ILab-Hackaton_CND-Phase2-Cyberattack_AI_detection/
 ├── pipeline/                       ← Package Python — pipeline de détection
 │   ├── __init__.py
 │   ├── __main__.py                 ← python -m pipeline
+│   ├── skill_enrichment.py         ← Mode Skill : RECOMMENDATION → CRITIQUE
+│   ├── skill_assets/               ← Prompts, schémas, validateurs du skill
 │   ├── config.py                   ← Tous les paramètres (API, seuils, AWS)
 │   ├── pipeline.py                 ← Point d'entrée : OpenSearch + détecteurs + Bedrock
 │   ├── pipeline_core.py            ← split_logs_frame + run_detectors
@@ -68,6 +71,10 @@ ILab-Hackaton_CND-Phase2-Cyberattack_AI_detection/
 ├── frontend/                       ← Interface Streamlit
 │   ├── streamlit_app.py            ← Application principale (3 pages)
 │   └── src/fixtures/               ← Données mockées pour le développement
+├── infra/                          ← Infrastructure (ECS task def + ALB CloudFormation)
+│   ├── ecs-task-definition.json
+│   ├── alb-cloudformation.yaml     ← ALB pour URL stable
+│   └── deploy_alb.sh              ← Script de déploiement ALB
 ├── sam/                            ← AWS SAM (Lambda + EventBridge + table curseur)
 │   ├── template.yaml
 │   └── handler.py
@@ -238,7 +245,8 @@ Les logs sont injectés en **3 lots successifs** (slices). Le payload fixe **`de
 - **AWS Lambda** : pipeline temps réel (SAM)
 - **Amazon S3** : stockage artefacts
 - **Amazon DynamoDB** : curseur pipeline
-- **ECS Fargate** : backend + frontend
+- **ECS Fargate** : backend + frontend (derrière ALB)
+- **ALB** : URL stable (`infra/alb-cloudformation.yaml`, déployer avec `bash infra/deploy_alb.sh`)
 
 ```python
 import boto3
@@ -301,6 +309,7 @@ python -m pipeline.submit --index 0   # soumettre #0 uniquement
 
 ### Variables d'environnement clés
 
+- `BEDROCK_SKILL_MODE=1` : mode Skill RECOMMENDATION + CRITIQUE (défaut, désactiver avec `=0` pour legacy)
 - `CND_DS1_CANONICAL_TIMELINE=1` : fenêtres DS1 officielles (désactiver pour DS2 : `=0`)
 - `CND_DS1_CANONICAL_IOCS=1` : noms de clés IoC alignés sur ground truth (désactiver pour DS2 : `=0`)
 - `BEDROCK_DROP_LOW_ENRICHMENT_CONFIDENCE=1` : retirer les détections `confidence=low`

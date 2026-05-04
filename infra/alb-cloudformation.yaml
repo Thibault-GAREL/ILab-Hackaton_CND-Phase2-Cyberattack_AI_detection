@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CND Phase 2 — ALB (Application Load Balancer) for stable ECS access.
+  Provides a persistent DNS name (*.eu-west-3.elb.amazonaws.com) that survives task restarts.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the ECS service runs
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Public subnets for the ALB (at least 2 AZs)
+
+  ECSSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group of the ECS tasks (ALB will be allowed to reach them)
+
+  ECSServiceName:
+    Type: String
+    Default: dirisi-hackathon-service
+
+  ECSClusterName:
+    Type: String
+    Default: dirisi-hackathon-cluster
+
+Resources:
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB ingress for CND Phase 2 (frontend + API)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Frontend (HTTP)
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+          Description: Backend API
+
+  ALBToECSIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 3000
+      ToPort: 3000
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Description: ALB -> ECS frontend
+
+  ALBToECSIngressAPI:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Description: ALB -> ECS backend
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: cnd-phase2-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+        - Key: Project
+          Value: cnd-phase2
+
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: cnd-phase2-frontend-tg
+      Port: 3000
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckPath: /_stcore/health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+      HealthCheckTimeoutSeconds: 10
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: cnd-phase2-backend-tg
+      Port: 8080
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      HealthCheckTimeoutSeconds: 5
+
+  FrontendListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultAction:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+
+  BackendListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 8080
+      Protocol: HTTP
+      DefaultAction:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+Outputs:
+  ALBDnsName:
+    Description: Stable DNS name for the ALB (use this instead of task IP)
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBDnsName"
+
+  FrontendURL:
+    Description: Frontend Streamlit URL
+    Value: !Sub "http://${ApplicationLoadBalancer.DNSName}"
+
+  BackendURL:
+    Description: Backend API URL
+    Value: !Sub "http://${ApplicationLoadBalancer.DNSName}:8080"
+
+  APIDocsURL:
+    Description: Swagger API documentation
+    Value: !Sub "http://${ApplicationLoadBalancer.DNSName}:8080/docs"
+
+  FrontendTargetGroupArn:
+    Description: ARN of the frontend target group (for ECS service config)
+    Value: !Ref FrontendTargetGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-FrontendTGArn"
+
+  BackendTargetGroupArn:
+    Description: ARN of the backend target group (for ECS service config)
+    Value: !Ref BackendTargetGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-BackendTGArn"

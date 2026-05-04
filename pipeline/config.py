@@ -205,6 +205,11 @@ DS1_CANONICAL_IOCS = _env_bool("CND_DS1_CANONICAL_IOCS", False)
 
 # Finale : ingestion par slices (3 lots) — detection_time_seconds non utilisé pour le score par défaut
 SCORING_BONUS_RAPIDITE_ENABLED = _env_bool("SCORING_BONUS_RAPIDITE_ENABLED", False)
+# Skill mode: use RECOMMENDATION -> CRITIQUE pipeline instead of legacy enrichment.
+# Disable with BEDROCK_SKILL_MODE=0 to revert to bedrock_analysis.enrich_detections().
+BEDROCK_SKILL_MODE = _env_bool("BEDROCK_SKILL_MODE", True)
+BEDROCK_SKILL_MAX_REVISIONS = 1
+
 # Retirer les detections dont l enrichissement Bedrock declare confidence=low (faux positifs distribution).
 BEDROCK_DROP_LOW_ENRICHMENT_CONFIDENCE = _env_bool(
     "BEDROCK_DROP_LOW_ENRICHMENT_CONFIDENCE", True

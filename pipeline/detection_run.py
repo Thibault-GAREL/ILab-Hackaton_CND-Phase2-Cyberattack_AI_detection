@@ -8,8 +8,9 @@ import sys
 
 import pandas as pd
 
-from .config import BEDROCK_ENABLED, SUBMIT_SKIP_DUPLICATES
+from .config import BEDROCK_ENABLED, BEDROCK_SKILL_MODE, SUBMIT_SKIP_DUPLICATES
 from .bedrock_analysis import enrich_detections
+from .skill_enrichment import enrich_detections_with_skill
 from .ds1_ioc_canonical import apply_ds1_ioc_canonicalization
 from .bedrock_os_context import fetch_bedrock_context
 from .detectors.dedup import deduplicate
@@ -62,7 +63,10 @@ def run_detection_chain(
                 ctx_df = fetch_bedrock_context(connector, attacks, sample_df)
             else:
                 ctx_df = sample_df
-            attacks = enrich_detections(attacks, ctx_df)
+            if BEDROCK_SKILL_MODE:
+                attacks = enrich_detections_with_skill(attacks, ctx_df)
+            else:
+                attacks = enrich_detections(attacks, ctx_df)
         else:
             print(
                 "[Pipeline] BEDROCK_ENABLED=0 — enrichissement IA ignoré, "

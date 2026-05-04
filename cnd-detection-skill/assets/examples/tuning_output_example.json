@@ -1,0 +1,83 @@
+{
+  "tuning_cycle_id": "2026-01-15T12:00:00Z",
+  "rules_analyzed": 6,
+  "recommendations": [
+    {
+      "rule_id": "CREDENTIAL_STUFFING_MIN_401",
+      "current_value": 20,
+      "recommended_value": 30,
+      "delta_pct": 50,
+      "direction": "raise",
+      "confidence": "high",
+      "evidence": {
+        "current_detections": 14,
+        "estimated_true_positives": 2,
+        "estimated_false_positives": 12,
+        "signal_distribution": "Mode bruit s'étend jusqu'à 30 (12 IPs), gap complet entre 30 et 1000, mode attaque autour de 2000+. Seuil 20 capte la queue du bruit."
+      },
+      "expected_impact": {
+        "expected_fp_reduction": 10,
+        "expected_fn_risk": "low",
+        "score_delta_estimate": "+100 pts (les 2 FPs récents évités + marge)"
+      },
+      "reasoning": "Les 2 derniers runs ont produit 2 FP credential_stuffing (-20 pts) sur des IPs de healthcheck/scanner. La distribution montre clairement un gap entre 30 et 1000 — monter à 30 garde la vraie campagne (>3500 événements) et coupe le bruit administratif.",
+      "rollback_criteria": "Si le challenge credential_stuffing n'est plus détecté au prochain cycle, redescendre à 20. Si réapparition de FP au-dessus de 30, monter à 50."
+    },
+    {
+      "rule_id": "SSH_BRUTE_FORCE_MIN_FAILURES",
+      "current_value": 20,
+      "recommended_value": 20,
+      "delta_pct": 0,
+      "direction": "hold",
+      "confidence": "high",
+      "evidence": {
+        "current_detections": 6,
+        "estimated_true_positives": 2,
+        "estimated_false_positives": 4,
+        "signal_distribution": "4 IPs entre 20 et 100, 2 IPs à ~2300. Gap clair. Les 4 IPs basses pourraient être des scans légitimes ou du bruit."
+      },
+      "expected_impact": {
+        "expected_fp_reduction": 0,
+        "expected_fn_risk": "none",
+        "score_delta_estimate": "stable"
+      },
+      "reasoning": "Le score actuel est stable à 138 sur ssh_brute_force. La détection capture bien les 2 vraies IPs. Les 4 IPs basses ne sont pas remontées comme FP par l'historique. Pas de raison de toucher.",
+      "rollback_criteria": "Si un FP ssh_brute_force apparaît dans scores_history, monter à 30."
+    },
+    {
+      "rule_id": "DIRECTORY_TRAVERSAL_MIN_ATTEMPTS",
+      "current_value": 3,
+      "recommended_value": 3,
+      "delta_pct": 0,
+      "direction": "hold",
+      "confidence": "medium",
+      "evidence": {
+        "current_detections": 1,
+        "estimated_true_positives": 1,
+        "estimated_false_positives": 0,
+        "signal_distribution": "Gap massif entre 3 et 50. Une seule IP attaquante claire à ~120 tentatives."
+      },
+      "expected_impact": {
+        "expected_fp_reduction": 0,
+        "expected_fn_risk": "none",
+        "score_delta_estimate": "stable, mais le score à 95 montre une marge de progression sur les IoC"
+      },
+      "reasoning": "Détection robuste actuellement. Le score 95 < 150 vient probablement d'un IoC manquant côté enrichment (à corriger via le mode RECOMMANDATION), pas d'un problème de seuil.",
+      "rollback_criteria": "Si bruit observé entre 3 et 50, monter à 5."
+    }
+  ],
+  "rules_skipped": [
+    {
+      "rule_id": "CAMPAIGN_OVERLAP_MINUTES",
+      "reason": "Pas de données dans cette fenêtre montrant un cas où le bon groupement aurait changé le score (campagnes mono-IP ou IPs déjà bien groupées). Re-évaluer après un run avec plusieurs IPs concurrentes."
+    },
+    {
+      "rule_id": "SQL_INJECTION_MIN_REQUESTS",
+      "reason": "Une seule IP candidate dans la fenêtre, déjà bien détectée et scorée à 145/150. Pas assez de variance pour proposer un changement."
+    },
+    {
+      "rule_id": "SSRF_MIN_REQUESTS",
+      "reason": "Volume insuffisant (1 IP au-dessus du seuil). Re-évaluer après accumulation d'historique."
+    }
+  ]
+}

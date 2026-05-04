@@ -45,6 +45,10 @@ class PipelineRunRequest(BaseModel):
     # Environnement pipeline
     bedrock_enabled: Optional[bool] = None
     model_id: Optional[str] = None
+    skill_mode: Optional[bool] = Field(
+        default=None,
+        description="Active le mode Skill (RECOMMENDATION + CRITIQUE) au lieu de l'enrichissement legacy.",
+    )
     timeout_seconds: Optional[int] = Field(
         default=None,
         ge=30,

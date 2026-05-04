@@ -19,7 +19,7 @@
       ],
       "environment": [
         {"name": "ENV", "value": "production"},
-        {"name": "CORS_ORIGINS", "value": "http://51.44.250.151:3000,http://ec2-51-44-250-151.eu-west-3.compute.amazonaws.com:3000"},
+        {"name": "CORS_ORIGINS", "value": "http://cnd-phase2-alb-*.eu-west-3.elb.amazonaws.com,http://cnd-phase2-alb-*.eu-west-3.elb.amazonaws.com:3000,http://localhost:3000"},
         {"name": "DETECTIONS_JSON_PATH", "value": "/app/detections.json"},
         {"name": "OPENSEARCH_AUTH", "value": "basic"},
         {"name": "OPENSEARCH_BASIC_USER", "value": "etudiant"}

@@ -31,6 +31,7 @@ def repo_root() -> Path:
 
 SESSION_KILL = "ia_kill_switch"
 SESSION_MODEL = "bedrock_model_id"
+SESSION_SKILL_MODE = "bedrock_skill_mode"
 
 
 def init_demo_session() -> None:
@@ -39,6 +40,8 @@ def init_demo_session() -> None:
         st.session_state[SESSION_KILL] = False
     if SESSION_MODEL not in st.session_state:
         st.session_state[SESSION_MODEL] = "eu.anthropic.claude-opus-4-6-v1"
+    if SESSION_SKILL_MODE not in st.session_state:
+        st.session_state[SESSION_SKILL_MODE] = True
     if "_os_lines" not in st.session_state:
         st.session_state["_os_lines"] = 50_000
     if "_pq_lines" not in st.session_state:
@@ -154,11 +157,14 @@ def trigger_pipeline_poll(
     *,
     bedrock_enabled: bool | None,
     model_id: str | None,
+    skill_mode: bool | None = None,
 ) -> dict[str, Any]:
     mid = (model_id or "").strip() or "eu.anthropic.claude-opus-4-6-v1"
     body: dict[str, Any] = {"source": "opensearch", "model_id": mid}
     if bedrock_enabled is not None:
         body["bedrock_enabled"] = bedrock_enabled
+    if skill_mode is not None:
+        body["skill_mode"] = skill_mode
     return trigger_pipeline_run(backend_url, body)
 
 
@@ -174,6 +180,15 @@ def render_operational_sidebar(backend_url: str) -> None:
         value=st.session_state[SESSION_KILL],
         help="En cas de dérive du modèle ou de panne Bedrock : la pipeline "
         "s'appuie uniquement sur les détecteurs heuristiques et les playbooks statiques.",
+    )
+
+    st.session_state[SESSION_SKILL_MODE] = st.checkbox(
+        "Mode Skill (RECOMMENDATION + CRITIQUE)",
+        value=st.session_state[SESSION_SKILL_MODE],
+        disabled=st.session_state[SESSION_KILL],
+        help="Enrichissement structuré avec anti-hallucination : RECOMMENDATION enrichit la "
+        "détection (MITRE, IoC, timeline), CRITIQUE vérifie l'ancrage dans les logs avant soumission. "
+        "Désactiver pour revenir à l'enrichissement legacy (bedrock_analysis).",
     )
 
     labels = [m["label"] for m in MODEL_PRESETS]
@@ -200,6 +215,7 @@ def render_operational_sidebar(backend_url: str) -> None:
                 backend_url,
                 bedrock_enabled=not st.session_state[SESSION_KILL],
                 model_id=st.session_state[SESSION_MODEL],
+                skill_mode=st.session_state[SESSION_SKILL_MODE],
             )
         if res.get("status") == "success":
             st.success(res.get("message", "OK"))

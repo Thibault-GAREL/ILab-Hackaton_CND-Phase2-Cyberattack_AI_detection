@@ -1,14 +1,31 @@
 ---
 title: "Guide de déploiement AWS"
-version: "2.0"
+version: "2.1"
 project: "CND Hackathon Phase 2"
-last_updated: "2026-05-04"
+last_updated: "2026-05-05"
 audience: ["ia", "humain", "jury"]
 ---
 
 # Déploiement AWS
 
 Région : **eu-west-3** (Paris).
+
+## ALB — URL stable (recommandé)
+
+Pour obtenir une URL stable qui ne change pas entre les redéploiements :
+
+```bash
+# Déploiement one-time de l'ALB (après avoir un service ECS running)
+bash infra/deploy_alb.sh
+```
+
+L'ALB fournit un DNS fixe de type `cnd-phase2-alb-XXXXXX.eu-west-3.elb.amazonaws.com`. Les URLs sont écrites dans `deploy-urls.env` et restent valides même après un `force-new-deployment` du service ECS.
+
+- Frontend : `http://<alb-dns>` (port 80)
+- API : `http://<alb-dns>:8080`
+- Swagger : `http://<alb-dns>:8080/docs`
+
+Le template CloudFormation est dans `infra/alb-cloudformation.yaml`.
 
 ## Prérequis
 

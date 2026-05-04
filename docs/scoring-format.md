@@ -1,8 +1,8 @@
 ---
 title: "Format de soumission et scoring"
-version: "2.0"
+version: "2.1"
 project: "CND Hackathon Phase 2"
-last_updated: "2026-05-04"
+last_updated: "2026-05-05"
 audience: ["ia", "humain", "jury"]
 ---
 
@@ -149,3 +149,14 @@ python -m pipeline.submit --index 0
 ## Anti-doublons
 
 La pipeline maintient un cache de fingerprints (`.submit_fingerprint_cache.json`). Chaque détection est hachée avant soumission ; si le hash existe déjà, la soumission est ignorée. Désactiver : `SUBMIT_SKIP_DUPLICATES=0`.
+
+## Anti-hallucination (Mode Skill)
+
+Quand `BEDROCK_SKILL_MODE=1` (défaut), chaque détection passe par :
+
+1. **RECOMMENDATION** : enrichit la détection brute (MITRE ATT&CK, IoC, timeline, remédiation) avec Claude Opus
+2. **CRITIQUE** : prompt opposé qui audite l'enrichissement — vérifie que chaque affirmation est ancrée dans les logs
+
+Si CRITIQUE rejette (claims_unsupported >= 3), la pipeline utilise la détection brute (sans enrichissement LLM) comme fallback. Cela protège contre les pénalités IoC hallucinés tout en préservant les points du détecteur déterministe.
+
+Toggle : `BEDROCK_SKILL_MODE=0` pour revenir à l'enrichissement legacy (`bedrock_analysis.py`).

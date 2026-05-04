@@ -210,36 +210,63 @@ else
 fi
 
 echo "[7/7] URL publiques..."
-PUBLIC_IP=""
-for _try in 1 2 3 4 5 6 7 8 9 10; do
-  PUBLIC_IP=$(ecs_service_public_ip || true)
-  if [[ -n "${PUBLIC_IP}" && "${PUBLIC_IP}" != "None" ]]; then
-    break
-  fi
-  sleep 6
-done
 
-if [[ -z "${PUBLIC_IP}" || "${PUBLIC_IP}" == "None" ]]; then
+# Try ALB DNS first (stable URL)
+ALB_STACK="${ALB_STACK_NAME:-cnd-phase2-alb}"
+ALB_DNS=$(aws cloudformation describe-stacks \
+  --region "${REGION}" \
+  --stack-name "${ALB_STACK}" \
+  --query 'Stacks[0].Outputs[?OutputKey==`ALBDnsName`].OutputValue | [0]' \
+  --output text 2>/dev/null || echo "None")
+
+if [[ -n "${ALB_DNS}" && "${ALB_DNS}" != "None" ]]; then
+  _alb_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  cat > "${URL_FILE}" << EOF
+# scripts/deploy_aws.sh ${_alb_ts} — ALB stable
+AWS_REGION=${REGION}
+ECS_CLUSTER=${ECS_CLUSTER}
+ECS_SERVICE=${ECS_SERVICE}
+ALB_DNS=${ALB_DNS}
+FRONTEND_URL=http://${ALB_DNS}
+API_URL=http://${ALB_DNS}:8080
+API_DOCS_URL=http://${ALB_DNS}:8080/docs
+API_HEALTH_URL=http://${ALB_DNS}:8080/health
+EOF
   echo ""
-  echo "  Impossible de lire l’IP publique tout de suite (tâche pas encore RUNNING ou pas d’IP)."
-  echo "  Réessayez dans 1–2 minutes : bash scripts/deploy_urls_only.sh"
-  write_url_file ""
-else
-  write_url_file "${PUBLIC_IP}"
-  echo ""
-  echo "───────────────────────────────────────────────────────────────────"
-  echo "  Fichier écrit : ${URL_FILE}"
-  echo "───────────────────────────────────────────────────────────────────"
+  echo "  URL STABLE (ALB) :"
+  echo "  Frontend : http://${ALB_DNS}"
+  echo "  API docs : http://${ALB_DNS}:8080/docs"
   cat "${URL_FILE}"
-  echo "───────────────────────────────────────────────────────────────────"
-  echo ""
-  echo "  Frontend : http://${PUBLIC_IP}:3000"
-  echo "  API docs : http://${PUBLIC_IP}:8080/docs"
-  echo ""
-  echo "  Si l’IP a changé : mettre à jour CORS_ORIGINS sur le backend (task)"
-  echo "  avec FRONTEND_URL dans ce fichier (voir docs/deployment.md)."
+else
+  # Fallback to task public IP
+  PUBLIC_IP=""
+  for _try in 1 2 3 4 5 6 7 8 9 10; do
+    PUBLIC_IP=$(ecs_service_public_ip || true)
+    if [[ -n "${PUBLIC_IP}" && "${PUBLIC_IP}" != "None" ]]; then
+      break
+    fi
+    sleep 6
+  done
+
+
+  if [[ -z "${PUBLIC_IP}" || "${PUBLIC_IP}" == "None" ]]; then
+    echo ""
+    echo "  IP publique introuvable (tache pas encore RUNNING)."
+    echo "  Reessayez : bash scripts/deploy_urls_only.sh"
+    echo "  Pour une URL stable : bash infra/deploy_alb.sh"
+    write_url_file ""
+  else
+    write_url_file "${PUBLIC_IP}"
+    echo ""
+    echo "  Frontend : http://${PUBLIC_IP}:3000"
+    echo "  API docs : http://${PUBLIC_IP}:8080/docs"
+    echo ""
+    echo "  ATTENTION : cette IP change a chaque redeploiement."
+    echo "  Pour une URL stable : bash infra/deploy_alb.sh"
+    cat "${URL_FILE}"
+  fi
 fi
 
 echo ""
 echo "Digest backend local : $(docker inspect --format='{{index .RepoDigests 0}}' cnd-backend:latest 2>/dev/null || echo '?')"
-echo "Terminé."
+echo "Termine."

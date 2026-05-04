@@ -1,8 +1,8 @@
 ---
 title: "Référence API"
-version: "2.0"
+version: "2.1"
 project: "CND Hackathon Phase 2"
-last_updated: "2026-05-04"
+last_updated: "2026-05-05"
 audience: ["ia", "humain", "jury"]
 ---
 
@@ -121,7 +121,7 @@ curl http://localhost:8080/v1/detections/stats/summary
 
 Lance une analyse : **OpenSearch** (`python -m pipeline`) ou **bench Parquet** (`scripts/run_pipeline_full_parquet.py`).
 
-Champs utiles : `source` (`opensearch` | `parquet`), `max_lines` (plafond lignes), `accumulate`, `reset_state`, `dry_run_state`, `no_dedup`, `submit_dry_run`, `submit` (soumission live : exige `PIPELINE_ALLOW_SUBMIT=1` sur le backend), `parquet_path`, `parquet_batch_rows`, `bedrock_enabled`, `model_id`, `timeout_seconds`.
+Champs utiles : `source` (`opensearch` | `parquet`), `max_lines` (plafond lignes), `accumulate`, `reset_state`, `dry_run_state`, `no_dedup`, `submit_dry_run`, `submit` (soumission live : exige `PIPELINE_ALLOW_SUBMIT=1` sur le backend), `parquet_path`, `parquet_batch_rows`, `bedrock_enabled`, `model_id`, `skill_mode` (active le mode RECOMMENDATION + CRITIQUE au lieu de l'enrichissement legacy), `timeout_seconds`.
 
 ```bash
 curl -X POST http://localhost:8080/v1/detections/pipeline/run \

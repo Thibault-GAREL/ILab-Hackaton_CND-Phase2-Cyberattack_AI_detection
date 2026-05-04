@@ -1,0 +1,82 @@
+{
+  "current_thresholds": {
+    "CREDENTIAL_STUFFING_MIN_401": 20,
+    "CAMPAIGN_OVERLAP_MINUTES": 90,
+    "SSH_BRUTE_FORCE_MIN_FAILURES": 20,
+    "SQL_INJECTION_MIN_REQUESTS": 5,
+    "DIRECTORY_TRAVERSAL_MIN_ATTEMPTS": 3,
+    "SSRF_MIN_REQUESTS": 3
+  },
+  "signal_distributions": {
+    "CREDENTIAL_STUFFING_MIN_401": {
+      "histogram": {
+        "1-5": 124530,
+        "5-20": 1284,
+        "20-30": 12,
+        "30-100": 0,
+        "100-500": 0,
+        "500-1000": 0,
+        "1000-5000": 2,
+        "5000+": 0
+      },
+      "comment": "12 IPs entre 20 et 30 (queue de bruit), 2 IPs au-dessus de 1000 (vraies attaques)"
+    },
+    "SSH_BRUTE_FORCE_MIN_FAILURES": {
+      "histogram": {
+        "1-5": 8421,
+        "5-20": 102,
+        "20-100": 4,
+        "100-500": 0,
+        "500-2000": 0,
+        "2000-5000": 2,
+        "5000+": 0
+      },
+      "comment": "4 IPs entre 20 et 100 (probable bruit ou scans légers), 2 IPs autour de 2300-2400 (campagne brute force)"
+    },
+    "SQL_INJECTION_MIN_REQUESTS": {
+      "histogram": {
+        "1-2": 41,
+        "2-5": 6,
+        "5-20": 0,
+        "20-100": 0,
+        "100-500": 1,
+        "500+": 0
+      },
+      "comment": "1 IP avec ~300 requêtes SQLi, le reste est du bruit dispersé"
+    },
+    "DIRECTORY_TRAVERSAL_MIN_ATTEMPTS": {
+      "histogram": {
+        "1-2": 18,
+        "2-3": 4,
+        "3-10": 0,
+        "10-50": 0,
+        "50-200": 1,
+        "200+": 0
+      },
+      "comment": "1 IP avec ~120 traversal patterns, gap clair avec le bruit"
+    },
+    "SSRF_MIN_REQUESTS": {
+      "histogram": {
+        "1-2": 9,
+        "2-3": 1,
+        "3-10": 0,
+        "10-50": 1,
+        "50+": 0
+      },
+      "comment": "Volume très faible, 1 IP avec ~25 requêtes vers IP interne"
+    }
+  },
+  "recent_detections": [
+    {"challenge_id": "credential_stuffing", "submitted": true, "score": 142},
+    {"challenge_id": "ssh_brute_force", "submitted": true, "score": 138},
+    {"challenge_id": "sql_injection", "submitted": true, "score": 145},
+    {"challenge_id": "directory_traversal", "submitted": true, "score": 95},
+    {"challenge_id": "ssrf", "submitted": true, "score": 88},
+    {"challenge_id": "credential_stuffing", "submitted": true, "score": -10, "note": "FP : IP de healthcheck interne"},
+    {"challenge_id": "credential_stuffing", "submitted": true, "score": -10, "note": "FP : scanner de vuln autorisé"}
+  ],
+  "scores_history_summary": {
+    "last_5_runs_total": [380, 405, 410, 488, 478],
+    "trend": "stable, mais 2 FP sur credential_stuffing au dernier run"
+  }
+}

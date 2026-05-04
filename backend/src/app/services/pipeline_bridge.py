@@ -172,6 +172,8 @@ def _pipeline_env(req: PipelineRunRequest) -> dict[str, str]:
         env["BEDROCK_ENABLED"] = "1" if req.bedrock_enabled else "0"
     if req.model_id and str(req.model_id).strip():
         env["BEDROCK_MODEL_ID"] = str(req.model_id).strip()
+    if req.skill_mode is not None:
+        env["BEDROCK_SKILL_MODE"] = "1" if req.skill_mode else "0"
     return env
 
 

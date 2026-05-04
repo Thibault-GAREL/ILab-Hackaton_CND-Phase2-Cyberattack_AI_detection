@@ -1,8 +1,8 @@
 ---
 title: "Pipeline de détection"
-version: "2.0"
+version: "2.1"
 project: "CND Hackathon Phase 2"
-last_updated: "2026-05-04"
+last_updated: "2026-05-05"
 audience: ["ia", "humain", "jury"]
 ---
 
@@ -15,7 +15,8 @@ OpenSearch (index logs-raw, delta + search_after)
  → split_logs_frame()             ← auth / app / net / sys par log_source
  → 5 détecteurs ciblés            ← un par challenge DS1
  → deduplicate()                  ← keep_most_specific (par IP/fenêtre)
- → enrich_detections()            ← Bedrock Claude Opus 4.6
+ → [BEDROCK_SKILL_MODE=1]         ← Mode Skill : RECOMMENDATION → CRITIQUE (anti-hallu)
+   OU [BEDROCK_SKILL_MODE=0]      ← Mode legacy : bedrock_analysis.enrich_detections()
  → apply_ds1_canonical_windows()  ← fenêtres DS1 officielles
  → apply_ds1_ioc_canonicalization() ← noms de clés alignés sur ground truth
  → attach_remediation_plans()     ← plans d'action par challenge
@@ -29,8 +30,10 @@ OpenSearch (index logs-raw, delta + search_after)
 |---|---|
 | `pipeline/pipeline.py` | Point d'entrée CLI : poll OpenSearch, écrit `detections.json` |
 | `pipeline/pipeline_core.py` | `split_logs_frame()` + `run_detectors()` |
-| `pipeline/detection_run.py` | Chaîne : détecteurs → dedup → Bedrock → DS1 → remédiation |
-| `pipeline/bedrock_analysis.py` | Appel Bedrock `converse()` — enrichissement + timeline raffinée |
+| `pipeline/detection_run.py` | Chaîne : détecteurs → dedup → Skill/Bedrock → DS1 → remédiation |
+| `pipeline/skill_enrichment.py` | Mode Skill : RECOMMENDATION → CRITIQUE (anti-hallucination) |
+| `pipeline/skill_assets/` | Prompts, schémas JSON, validateurs du skill cnd-detection-tuner |
+| `pipeline/bedrock_analysis.py` | Mode legacy : appel Bedrock `converse()` — enrichissement + timeline raffinée |
 | `pipeline/bedrock_os_context.py` | Contexte OpenSearch élargi pour Bedrock |
 | `pipeline/ds1_timeline.py` | Normalisation des fenêtres temporelles DS1 |
 | `pipeline/ds1_ioc_canonical.py` | Normalisation des noms de clés IoC |

@@ -1,0 +1,77 @@
+{
+  "challenge_id": "credential_stuffing",
+  "submission": {
+    "challenge_id": "credential_stuffing",
+    "detection": {
+      "attack_type": "credential_stuffing",
+      "attacker_ips": ["203.0.113.45", "198.51.100.23"],
+      "victim_accounts": ["jdupont"],
+      "attack_start_time": "2026-01-06T02:00:00Z",
+      "attack_end_time": "2026-01-06T06:00:00Z",
+      "indicators": {
+        "failed_logins": 3500,
+        "web_shell": "/uploads/image_2026.php",
+        "reverse_shell_port": 4444,
+        "geolocation": "Beijing"
+      }
+    },
+    "detection_time_seconds": 180
+  },
+  "enrichment": {
+    "mitre_techniques": [
+      {"id": "T1110.004", "name": "Credential Stuffing"},
+      {"id": "T1505.003", "name": "Web Shell"},
+      {"id": "T1059", "name": "Command and Scripting Interpreter"}
+    ],
+    "kill_chain_phase": "Initial Access → Execution → Persistence",
+    "severity": "critical",
+    "remediation": [
+      "Bloquer immédiatement 203.0.113.45 et 198.51.100.23 au niveau du WAF/firewall externe",
+      "Forcer la réinitialisation du mot de passe du compte jdupont et invalider toutes les sessions actives associées",
+      "Supprimer le fichier /uploads/image_2026.php et auditer le répertoire /uploads pour d'autres web shells (signatures PHP exécutables)",
+      "Bloquer le port 4444 sortant sur les serveurs web et tuer tout processus en écoute sur ce port",
+      "Activer la MFA sur tous les comptes ayant connu des tentatives 401 dans la fenêtre 02:00-06:00 UTC du 06/01",
+      "Lancer un scan de signatures sur tous les fichiers déposés dans /uploads après 04:00 UTC"
+    ]
+  },
+  "evidence": {
+    "attacker_ips": [
+      {
+        "value": "203.0.113.45",
+        "support": [
+          "2026-01-06T02:14:33Z auth.log status=failure username=jdupont auth_method=web",
+          "2026-01-06T03:42:11Z app.log status_code=401 uri=/login",
+          "count=2842 occurrences sur la fenêtre 02:00-06:00Z"
+        ]
+      },
+      {
+        "value": "198.51.100.23",
+        "support": [
+          "2026-01-06T02:51:08Z auth.log status=failure username=jdupont",
+          "count=658 occurrences sur la fenêtre 02:00-06:00Z"
+        ]
+      }
+    ],
+    "victim_accounts": [
+      {
+        "value": "jdupont",
+        "support": [
+          "3500 échecs combinés (auth_failure + http 401) sur le username 'jdupont' dans la fenêtre",
+          "Premier succès observé à 2026-01-06T04:18:22Z depuis 203.0.113.45"
+        ]
+      }
+    ],
+    "attack_window": {
+      "start_support": "Premier 401 sur jdupont à 2026-01-06T02:00:14Z source_ip=203.0.113.45",
+      "end_support": "Dernière connexion sortante destination_port=4444 à 2026-01-06T05:58:42Z"
+    },
+    "indicators_support": {
+      "failed_logins": "Compte combiné auth_log status=failure (1842) + app_log status_code=401 (1658) sur les 2 IPs = 3500",
+      "web_shell": "POST /uploads/image_2026.php observé à 2026-01-06T04:23:12Z depuis 203.0.113.45 (status_code=200, response_size=174)",
+      "reverse_shell_port": "Tentative de connexion sortante destination_port=4444 à 2026-01-06T04:24:01Z depuis le serveur web",
+      "geolocation": "Les 2 IPs résolvent geolocation_country=China dans les logs auth, geolocation_lat≈39.9, geolocation_lon≈116.4 (Pékin)"
+    }
+  },
+  "confidence": "high",
+  "reasoning": "Pattern textbook de credential stuffing : haute volumétrie d'échecs sur un compte unique, depuis 2 IPs externes coordonnées dans la même fenêtre, suivi d'un succès puis dépôt de web shell en POST et tentative immédiate de reverse shell sur 4444. Les 4 IoC attendus par le jury (failed_logins, web_shell, reverse_shell_port, geolocation) sont tous directement observables dans les logs. Confiance haute."
+}

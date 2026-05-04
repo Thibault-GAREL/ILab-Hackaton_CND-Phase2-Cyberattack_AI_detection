@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RecommendationOutput",
+  "type": "object",
+  "required": ["challenge_id", "submission", "enrichment", "evidence", "confidence", "reasoning"],
+  "properties": {
+    "challenge_id": {
+      "type": "string",
+      "enum": ["credential_stuffing", "ssh_brute_force", "sql_injection", "directory_traversal", "ssrf"]
+    },
+    "submission": {
+      "type": "object",
+      "required": ["challenge_id", "detection", "detection_time_seconds"],
+      "properties": {
+        "challenge_id": {
+          "type": "string",
+          "enum": ["credential_stuffing", "ssh_brute_force", "sql_injection", "directory_traversal", "ssrf"]
+        },
+        "detection": {
+          "type": "object",
+          "required": ["attack_type", "attacker_ips", "victim_accounts", "attack_start_time", "attack_end_time", "indicators"],
+          "properties": {
+            "attack_type": {
+              "type": "string",
+              "enum": ["credential_stuffing", "ssh_brute_force", "sql_injection", "directory_traversal", "ssrf"]
+            },
+            "attacker_ips": {
+              "type": "array",
+              "items": {"type": "string", "pattern": "^(\\d{1,3}\\.){3}\\d{1,3}$"},
+              "uniqueItems": true,
+              "minItems": 1
+            },
+            "victim_accounts": {
+              "type": "array",
+              "items": {"type": "string"},
+              "uniqueItems": true
+            },
+            "attack_start_time": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+            },
+            "attack_end_time": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+            },
+            "indicators": {"type": "object"}
+          }
+        },
+        "detection_time_seconds": {"type": "integer", "minimum": 0}
+      }
+    },
+    "enrichment": {
+      "type": "object",
+      "required": ["mitre_techniques", "kill_chain_phase", "severity", "remediation"],
+      "properties": {
+        "mitre_techniques": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^T\\d{4}(\\.\\d{3})?$"},
+              "name": {"type": "string"}
+            }
+          },
+          "minItems": 1
+        },
+        "kill_chain_phase": {"type": "string"},
+        "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+        "remediation": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 15},
+          "minItems": 1
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["attacker_ips", "attack_window", "indicators_support"],
+      "properties": {
+        "attacker_ips": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["value", "support"],
+            "properties": {
+              "value": {"type": "string"},
+              "support": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+            }
+          }
+        },
+        "victim_accounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["value", "support"],
+            "properties": {
+              "value": {"type": "string"},
+              "support": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+            }
+          }
+        },
+        "attack_window": {
+          "type": "object",
+          "required": ["start_support", "end_support"],
+          "properties": {
+            "start_support": {"type": "string"},
+            "end_support": {"type": "string"}
+          }
+        },
+        "indicators_support": {"type": "object"}
+      }
+    },
+    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+    "reasoning": {"type": "string", "minLength": 20}
+  }
+}

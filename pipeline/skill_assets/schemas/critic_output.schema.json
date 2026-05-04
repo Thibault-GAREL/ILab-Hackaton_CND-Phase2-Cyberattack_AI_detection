@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CriticOutput",
+  "type": "object",
+  "required": [
+    "audit_id", "status",
+    "claims_audited", "claims_grounded", "claims_inferred", "claims_unsupported",
+    "score", "audited_claims", "issues", "patches"
+  ],
+  "properties": {
+    "audit_id": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+    "status": {
+      "type": "string",
+      "enum": ["approved", "approved_with_warnings", "needs_revision", "rejected"]
+    },
+    "claims_audited": {"type": "integer", "minimum": 0},
+    "claims_grounded": {"type": "integer", "minimum": 0},
+    "claims_inferred": {"type": "integer", "minimum": 0},
+    "claims_unsupported": {"type": "integer", "minimum": 0},
+    "score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "audited_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "value", "verdict", "evidence_in_logs", "comment"],
+        "properties": {
+          "path": {"type": "string"},
+          "value": {},
+          "verdict": {"type": "string", "enum": ["grounded", "inferred", "unsupported"]},
+          "evidence_in_logs": {"type": "string"},
+          "comment": {"type": "string"}
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "path", "description"],
+        "properties": {
+          "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+          "path": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "action", "reason"],
+        "properties": {
+          "path": {"type": "string"},
+          "current_value": {},
+          "action": {"type": "string", "enum": ["remove", "replace", "set"]},
+          "new_value": {},
+          "reason": {"type": "string"}
+        }
+      }
+    }
+  }
+}

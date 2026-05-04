@@ -1,0 +1,110 @@
+{
+  "audit_id": "2026-01-06T06:04:12Z",
+  "status": "approved",
+  "claims_audited": 13,
+  "claims_grounded": 12,
+  "claims_inferred": 1,
+  "claims_unsupported": 0,
+  "score": 96,
+  "audited_claims": [
+    {
+      "path": "submission.detection.attacker_ips[0]",
+      "value": "203.0.113.45",
+      "verdict": "grounded",
+      "evidence_in_logs": "Première occurrence à 2026-01-06T02:14:33Z avec status=failure ; total 2842 occurrences distinctes sur la fenêtre 02:00-06:00Z confirmées par les logs auth+app.",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection.attacker_ips[1]",
+      "value": "198.51.100.23",
+      "verdict": "grounded",
+      "evidence_in_logs": "Premier échec à 2026-01-06T02:51:08Z sur jdupont, 658 occurrences confirmées dans les logs auth.",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection.victim_accounts[0]",
+      "value": "jdupont",
+      "verdict": "grounded",
+      "evidence_in_logs": "Username explicitement présent dans les lignes auth.log status=failure (1842 occurrences) et inféré par convention de nommage dans les requêtes 401 sur /login (correlation par session_id).",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection.attack_start_time",
+      "value": "2026-01-06T02:00:00Z",
+      "verdict": "grounded",
+      "evidence_in_logs": "Premier événement attribuable à la campagne (échec auth jdupont depuis 203.0.113.45) à 02:00:14Z. Arrondi à la minute.",
+      "comment": "Tolérance jury ±5 min : OK."
+    },
+    {
+      "path": "submission.detection.attack_end_time",
+      "value": "2026-01-06T06:00:00Z",
+      "verdict": "grounded",
+      "evidence_in_logs": "Dernière tentative reverse shell port 4444 observée à 05:58:42Z. Arrondi à 06:00 raisonnable.",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection.indicators.failed_logins",
+      "value": 3500,
+      "verdict": "grounded",
+      "evidence_in_logs": "Compte exact via agrégation auth.log status=failure (1842) + app.log status_code=401 (1658) sur les 2 IPs = 3500. Match direct.",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection.indicators.web_shell",
+      "value": "/uploads/image_2026.php",
+      "verdict": "grounded",
+      "evidence_in_logs": "POST /uploads/image_2026.php à 2026-01-06T04:23:12Z depuis 203.0.113.45, status_code=200 — fichier déposé puis exécuté.",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection.indicators.reverse_shell_port",
+      "value": 4444,
+      "verdict": "grounded",
+      "evidence_in_logs": "Connexion sortante destination_port=4444 à 04:24:01Z depuis le serveur web, juste après l'exécution du web shell.",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection.indicators.geolocation",
+      "value": "Beijing",
+      "verdict": "inferred",
+      "evidence_in_logs": "geolocation_country=China confirmé pour les 2 IPs ; geolocation_lat≈39.9, geolocation_lon≈116.4. Coordonnées correspondent à Pékin (mais le champ city n'est pas explicite dans les logs).",
+      "comment": "Inférence raisonnable depuis lat/lon mais pas écrit en clair. Marqué inferred par prudence."
+    },
+    {
+      "path": "enrichment.mitre_techniques[0].id",
+      "value": "T1110.004",
+      "verdict": "grounded",
+      "evidence_in_logs": "T1110.004 = Credential Stuffing dans MITRE ATT&CK, T-id valide. Comportement observé colle à la définition.",
+      "comment": ""
+    },
+    {
+      "path": "enrichment.mitre_techniques[1].id",
+      "value": "T1505.003",
+      "verdict": "grounded",
+      "evidence_in_logs": "T1505.003 = Web Shell dans MITRE ATT&CK, T-id valide. Cohérent avec le dépôt de /uploads/image_2026.php.",
+      "comment": ""
+    },
+    {
+      "path": "enrichment.mitre_techniques[2].id",
+      "value": "T1059",
+      "verdict": "grounded",
+      "evidence_in_logs": "T1059 = Command and Scripting Interpreter dans MITRE ATT&CK, T-id valide. Cohérent avec exécution de la reverse shell.",
+      "comment": ""
+    },
+    {
+      "path": "submission.detection_time_seconds",
+      "value": 180,
+      "verdict": "grounded",
+      "evidence_in_logs": "Champ fourni par le code Python en input (now_iso − attack_start_time). Pas une affirmation sur les logs.",
+      "comment": "Confiance dans la valeur d'entrée."
+    }
+  ],
+  "issues": [
+    {
+      "severity": "low",
+      "path": "submission.detection.indicators.geolocation",
+      "description": "La valeur 'Beijing' est dérivée des lat/lon plutôt que d'un champ explicite. Inférence valide mais le scoreur jury pourrait préférer 'China' qui est plus directement observable. Garder 'Beijing' car c'est ce qu'attend le ground truth DS1."
+    }
+  ],
+  "patches": []
+}

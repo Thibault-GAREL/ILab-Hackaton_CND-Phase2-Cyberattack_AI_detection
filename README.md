@@ -6,7 +6,7 @@
 
 Pipeline IA de détection de cyberattaques pour le hackathon CND (EPITA / ESGI / ECE) — Mai 2026.
 
-Ingestion temps réel depuis **Amazon OpenSearch**, détection heuristique de 5 types d'attaques, enrichissement via **Claude Opus 4.6** (Amazon Bedrock), soumission automatique vers l'API de scoring.
+Ingestion temps réel depuis **Amazon OpenSearch**, détection heuristique de 5 types d'attaques, enrichissement structuré via **Claude Opus 4.6** (Amazon Bedrock) avec anti-hallucination (RECOMMENDATION + CRITIQUE), soumission automatique vers l'API de scoring.
 
 **Documentation complète** : [`docs/`](docs/README.md)
 
@@ -19,8 +19,10 @@ Ingestion temps réel depuis **Amazon OpenSearch**, détection heuristique de 5 
 │   ├── config.py           # Paramètres, seuils, credentials AWS
 │   ├── pipeline.py         # Point d'entrée : OpenSearch → détection → soumission
 │   ├── pipeline_core.py    # split_logs_frame + run_detectors
-│   ├── detection_run.py    # Chaîne dedup → Bedrock → DS1 → remédiation
-│   ├── bedrock_analysis.py # Enrichissement LLM (Claude Opus 4.6)
+│   ├── detection_run.py    # Chaîne dedup → Skill/Bedrock → DS1 → remédiation
+│   ├── skill_enrichment.py # Mode Skill : RECOMMENDATION → CRITIQUE (anti-hallu)
+│   ├── skill_assets/       # Prompts, schémas, validateurs du skill
+│   ├── bedrock_analysis.py # Mode legacy : enrichissement LLM (Claude Opus 4.6)
 │   ├── remediation.py      # Plans de remédiation par challenge
 │   ├── submit.py           # POST vers l'API de scoring
 │   └── detectors/          # 5 détecteurs + dedup + utils
@@ -38,8 +40,13 @@ Ingestion temps réel depuis **Amazon OpenSearch**, détection heuristique de 5 
 │       ├── schemas/
 │       ├── services/
 │       └── security.py
-├── frontend/               # Interface Streamlit (3 pages)
+├── cnd-detection-skill/    # Skill Bedrock (prompts, schemas, orchestrateur)
+├── frontend/               # Interface Streamlit (3 pages, toggle skill mode)
 │   └── streamlit_app.py
+├── infra/                  # ECS task def + ALB CloudFormation
+│   ├── ecs-task-definition.json
+│   ├── alb-cloudformation.yaml
+│   └── deploy_alb.sh
 ├── sam/                    # AWS SAM (Lambda + EventBridge rate(5 min))
 │   ├── template.yaml
 │   └── handler.py
@@ -103,15 +110,19 @@ cd frontend && BACKEND_URL=http://127.0.0.1:8080 streamlit run streamlit_app.py 
 
 La navigation multipage **native** Streamlit est désactivée (`frontend/.streamlit/config.toml` et flag dans `make streamlit`) pour n’afficher qu’**une** barre latérale (celle du projet avec `st.page_link`).
 
+### URL stable (ALB)
+
+Après déploiement : `bash infra/deploy_alb.sh` — donne un DNS ALB fixe (`cnd-phase2-alb-*.eu-west-3.elb.amazonaws.com`) qui ne change plus entre les redéploiements ECS.
+
 ## Documentation
 
 | Document | Description |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Architecture AWS, diagramme Mermaid |
-| [docs/pipeline.md](docs/pipeline.md) | 5 détecteurs, dedup, Bedrock, remédiation |
+| [docs/architecture.md](docs/architecture.md) | Architecture AWS, ALB, diagramme Mermaid |
+| [docs/pipeline.md](docs/pipeline.md) | 5 détecteurs, dedup, Skill mode (RECOMMENDATION + CRITIQUE) |
 | [docs/api-reference.md](docs/api-reference.md) | Endpoints FastAPI + curl |
-| [docs/deployment.md](docs/deployment.md) | Déploiement ECS Fargate, ECR, Lambda |
-| [docs/scoring-format.md](docs/scoring-format.md) | Format JSON + checklist scoring |
+| [docs/deployment.md](docs/deployment.md) | Déploiement ALB, ECS Fargate, ECR, Lambda |
+| [docs/scoring-format.md](docs/scoring-format.md) | Format JSON + anti-hallucination + scoring |
 
 ---
 
