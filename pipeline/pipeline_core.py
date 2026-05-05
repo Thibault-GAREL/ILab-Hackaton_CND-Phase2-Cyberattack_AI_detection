@@ -1,5 +1,5 @@
 """
-Decoupage des logs par source et lancement des 5 detecteurs DS1 (sans OpenSearch / sans Bedrock).
+Decoupage des logs par source et lancement des 10 detecteurs DS1+DS2 (sans OpenSearch / sans Bedrock).
 """
 
 from __future__ import annotations
@@ -14,6 +14,11 @@ from .detectors import (
     detect_sql_injection,
     detect_directory_traversal,
     detect_ssrf,
+    detect_port_scan,
+    detect_data_exfiltration,
+    detect_ldap_brute_force,
+    detect_resource_exhaustion,
+    detect_reconnaissance,
 )
 
 AUTH_COLS = [
@@ -69,21 +74,26 @@ def run_detectors(
     t0 = time.time()
 
     steps = [
+        # DS1 detectors
         ("Credential stuffing", lambda: detect_credential_stuffing(
-            app_all,
-            auth_failures=auth_failures,
-            net_all=net_all,
-            auth_all=auth_all,
+            app_all, auth_failures=auth_failures, net_all=net_all, auth_all=auth_all,
         )),
         ("SSH brute force", lambda: detect_ssh_brute_force(
-            auth_failures,
-            sys_df=sys_all,
-            net_df=net_all,
-            auth_all=auth_all,
+            auth_failures, sys_df=sys_all, net_df=net_all, auth_all=auth_all,
         )),
         ("SQL injection", lambda: detect_sql_injection(app_all)),
         ("Directory traversal", lambda: detect_directory_traversal(app_all)),
         ("SSRF", lambda: detect_ssrf(app_all, net_df=net_all)),
+        # DS2 detectors
+        ("Port scan", lambda: detect_port_scan(net_all)),
+        ("Data exfiltration", lambda: detect_data_exfiltration(net_all)),
+        ("LDAP brute force", lambda: detect_ldap_brute_force(
+            auth_failures, auth_all=auth_all,
+        )),
+        ("Resource exhaustion", lambda: detect_resource_exhaustion(
+            sys_all, net_all=net_all,
+        )),
+        ("Reconnaissance", lambda: detect_reconnaissance(net_all)),
     ]
 
     attacks = []
