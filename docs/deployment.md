@@ -117,6 +117,8 @@ Déploiement de référence hackathon :
 
 **Tâche multi-conteneurs (recommandé)** : backend + frontend dans la même définition de tâche, même namespace réseau.
 
+**Health check backend** : si le conteneur reste `UNHEALTHY`, c’est souvent un **démarrage trop lent** avant que `uvicorn` écoute sur `8080`. Le fichier [`infra/ecs-task-definition.json`](../infra/ecs-task-definition.json) utilise `startPeriod: 90s`, `interval` / `timeout` élargis, et `urllib.request` vers `http://127.0.0.1:8080/health` (stdlib, pas de dépendance à `requests`). Enregistrer une **nouvelle révision** de task definition après modification, puis `update-service` avec cette révision.
+
 - **Backend** : port conteneur **8080** (mappé sur l’hôte en **8080**).
 - **Frontend Streamlit** : port conteneur **3000** (sur Fargate awsvpc, l’ENI publique expose ce même port — pas de translation `3000→8501`).
 

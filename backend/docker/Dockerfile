@@ -17,8 +17,8 @@ ENV DETECTIONS_JSON_PATH=/app/detections.json
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=15s --timeout=8s --retries=5 --start-period=25s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()"
+HEALTHCHECK --interval=15s --timeout=10s --retries=5 --start-period=90s \
+ CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=8).read()"
 
 # Même cible que la task ECS (sh -c ... uvicorn src.app.main:app)
 CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
