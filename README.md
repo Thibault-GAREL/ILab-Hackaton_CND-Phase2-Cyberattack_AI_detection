@@ -309,7 +309,7 @@ bash infra/deploy_alb.sh
 
 ## 📖 Inspiration / Sources
 
-Built for the **CND Hackathon 2026** (EPITA / ESGI / ECE — May 2026). I used **Claude (Opus 4.6 + Claude Code)** as a coding companion on the skill design (RECOMMENDATION + CRITIQUE pattern) and the ALB / ECS infrastructure scripts.
+Built for the **CND Hackathon 2026** as the ECE team — May 2026. I used **Claude (Opus 4.6 + Claude Code)** and **Kiro** as coding companions on the skill design and the ALB / ECS infrastructure scripts.
 
 Full documentation lives in [`docs/`](docs/README.md):
 - 📄 [docs/architecture.md](docs/architecture.md) — AWS architecture
@@ -318,4 +318,4 @@ Full documentation lives in [`docs/`](docs/README.md):
 - 📄 [docs/deployment.md](docs/deployment.md) — AWS deployment guide
 - 📄 [docs/scoring-format.md](docs/scoring-format.md) — Submission JSON format
 
-Code created by me 😎, Thibault GAREL - [Github](https://github.com/Thibault-GAREL)
+Code created by [Robin](https://github.com/Rqbln) and me 😎, Thibault GAREL - [Github](https://github.com/Thibault-GAREL)
